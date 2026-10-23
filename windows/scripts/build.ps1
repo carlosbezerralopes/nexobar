@@ -44,6 +44,8 @@ Copy-Item (Join-Path $root 'README.md') (Join-Path $publish 'LEIA-ME-WINDOWS.md'
 Copy-Item (Join-Path $projectRoot 'LICENSE') $publish -Force
 Copy-Item (Join-Path $projectRoot 'THIRD_PARTY_NOTICES.md') $publish -Force
 Copy-Item (Join-Path $root 'docs') (Join-Path $publish 'docs') -Recurse -Force
+New-Item -ItemType Directory -Force (Join-Path $publish 'setup') | Out-Null
+Copy-Item (Join-Path $root 'setup/README.md') (Join-Path $publish 'setup/README.md') -Force
 Copy-Item (Join-Path $projectRoot 'docs/ATTRIBUTION.md') (Join-Path $publish 'docs/ATTRIBUTION.md') -Force
 Copy-Item (Join-Path $root 'scripts/smoke-windows.ps1') $publish -Force
 $nativePublish = Join-Path $publish 'native-tests'
@@ -53,6 +55,11 @@ if ($LASTEXITCODE -ne 0) { throw 'Publicação do harness ConPTY falhou.' }
 # Windows WinUI/MakeAppx tooling to produce the companion MSIX.
 $widgetSource = Join-Path $publish 'widbar-source/windows'
 New-Item -ItemType Directory -Force $widgetSource | Out-Null
+$widgetRoot = Split-Path $widgetSource -Parent
+Copy-Item (Join-Path $projectRoot 'LICENSE') $widgetRoot -Force
+Copy-Item (Join-Path $projectRoot 'THIRD_PARTY_NOTICES.md') $widgetRoot -Force
+New-Item -ItemType Directory -Force (Join-Path $widgetRoot 'docs') | Out-Null
+Copy-Item (Join-Path $projectRoot 'docs/ATTRIBUTION.md') (Join-Path $widgetRoot 'docs/ATTRIBUTION.md') -Force
 Copy-Item (Join-Path $root 'Directory.Build.props') $widgetSource -Force
 foreach ($directory in @('core','widbar')) {
     $origin = Join-Path $root $directory

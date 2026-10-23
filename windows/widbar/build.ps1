@@ -55,6 +55,10 @@ if ($LASTEXITCODE -ne 0) { throw 'Compilação WinUI falhou.' }
 Get-ChildItem $payload -Recurse -Filter '*.pdb' -File | Remove-Item -Force
 $licenses = Join-Path $payload 'licenses'
 New-Item -ItemType Directory -Force $licenses | Out-Null
+$projectRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+Copy-Item (Join-Path $projectRoot 'LICENSE') (Join-Path $payload 'LICENSE') -Force
+Copy-Item (Join-Path $projectRoot 'THIRD_PARTY_NOTICES.md') (Join-Path $payload 'THIRD_PARTY_NOTICES.md') -Force
+Copy-Item (Join-Path $projectRoot 'docs/ATTRIBUTION.md') (Join-Path $licenses 'ATTRIBUTION.md') -Force
 Copy-Item (Join-Path $PSScriptRoot 'LICENSE-WidBar-SDK.txt') $licenses
 Get-ChildItem $env:NUGET_PACKAGES -Recurse -File | Where-Object { $_.Name -match '^(LICENSE|LICENCE|COPYING|THIRD.PARTY)' -and $_.Extension -notin '.dll','.xml' } | ForEach-Object {
     $name = [IO.Path]::GetRelativePath($env:NUGET_PACKAGES, $_.FullName).Replace([IO.Path]::DirectorySeparatorChar, '_')

@@ -19,6 +19,8 @@ internal sealed class SettingsWindow : Window
     private readonly Border widgetPreview = new() { Margin = new Thickness(0, 8, 0, 8), BorderThickness = new Thickness(1), Padding = new Thickness(6) };
     private int previewPage;
     private TextBlock? widgetStatus;
+    private StackPanel? widgetRows;
+    private ScrollViewer? settingsScroll;
     private readonly System.Windows.Threading.DispatcherTimer statusRefresh;
     internal SettingsWindow(Preferences preferences, Func<string?> apply, Func<bool>? widgetConnected = null)
     {
@@ -33,6 +35,7 @@ internal sealed class SettingsWindow : Window
     }
     private void Render()
     {
+        double offset = settingsScroll?.VerticalOffset ?? 0;
         DesktopIntegration.Theme(this);
         var root = new DockPanel { Margin = new Thickness(18) };
         var footer = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
@@ -106,7 +109,9 @@ internal sealed class SettingsWindow : Window
         panel.Children.Add(Label("GPUs desconectadas mantêm nome e ordem salvos. Elas voltam à barra quando forem detectadas novamente."));
         panel.Children.Add(Label("Sem inicialização automática ou elevação. Sensores inacessíveis e cotas ausentes aparecem como indisponíveis."));
         panel.Children.Add(Label("Claude exige o executável nativo claude.exe e uma sessão já autenticada; shims .cmd não são executados. Cursor, Grok, OpenCode Go, GLM e Antigravity não têm uma fonte segura validada no Windows."));
-        root.Children.Add(new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
+        settingsScroll = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        settingsScroll.Loaded += (_, _) => settingsScroll.ScrollToVerticalOffset(offset);
+        root.Children.Add(settingsScroll);
         Content = root;
     }
     private void AddWidgetOptions(StackPanel panel)
@@ -118,10 +123,21 @@ internal sealed class SettingsWindow : Window
         var layout = new ComboBox { HorizontalAlignment = HorizontalAlignment.Left, MinWidth = 220, Margin = new Thickness(0, 4, 0, 6) };
         layout.Items.Add(new ComboBoxItem { Content = "Horizontal", Tag = "horizontal" });
         layout.Items.Add(new ComboBoxItem { Content = "Duas linhas", Tag = "twoRows" });
-        layout.SelectedIndex = preferences.Displays.WidgetLayout == "twoRows" ? 1 : 0;
-        layout.SelectionChanged += (_, _) => { preferences.Displays.WidgetLayout = (string)((ComboBoxItem)layout.SelectedItem).Tag; PreviewWidget(); };
+        layout.Items.Add(new ComboBoxItem { Content = "Personalizado — duas linhas", Tag = "customRows" });
+        layout.SelectedIndex = preferences.Displays.WidgetLayout == "customRows" ? 2 : preferences.Displays.WidgetLayout == "twoRows" ? 1 : 0;
+        layout.SelectionChanged += (_, _) => {
+            string chosen = (string)((ComboBoxItem)layout.SelectedItem).Tag;
+            if (chosen == "customRows") preferences.Displays.UseCustomLayout(EnabledWidgetIds());
+            else preferences.Displays.WidgetLayout = chosen;
+            previewPage = 0; Render();
+        };
         panel.Children.Add(layout);
-        Number(panel, "Indicadores por página", preferences.Displays.WidgetItemsPerPage, 1, 4, v => { preferences.Displays.WidgetItemsPerPage = v; previewPage = 0; PreviewWidget(); });
+        var preset = new Button { Content = "CPU e memória acima; Claude, Codex e Kiro abaixo", HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 4, 8, 4) };
+        preset.Click += (_, _) => { preferences.Displays.UseHardwareAgentsPreset(); previewPage = 0; Render(); };
+        panel.Children.Add(preset);
+        panel.Children.Add(Label("O preset organiza esses cinco IDs; a seleção dos indicadores e a largura continuam nas opções correspondentes."));
+        widgetRows = new StackPanel(); panel.Children.Add(widgetRows); RefreshWidgetRows();
+        Number(panel, "Indicadores por página", preferences.Displays.WidgetItemsPerPage, 1, 8, v => { preferences.Displays.WidgetItemsPerPage = v; previewPage = 0; PreviewWidget(); });
         Number(panel, "Largura do widget (px)", preferences.Displays.WidgetWidth, 120, 600, v => { preferences.Displays.WidgetWidth = v; PreviewWidget(); });
         panel.Children.Add(Toggle("Alternar páginas automaticamente", preferences.Displays.WidgetRotate, v => preferences.Displays.WidgetRotate = v));
         Number(panel, "Intervalo de rotação (segundos)", preferences.Displays.WidgetRotationSeconds, 2, 60, v => preferences.Displays.WidgetRotationSeconds = v);
@@ -142,21 +158,64 @@ internal sealed class SettingsWindow : Window
     private void PreviewWidget()
     {
         var options = preferences.Displays;
-        string[] demo = ["CPU · 24%", "RAM · 12/32 GiB", "GPU · 41%", "Claude · 38%", "Codex · 12%"];
-        var page = WidgetPaging.Page(demo, previewPage, options.WidgetItemsPerPage);
+        var demo = preferences.Indicators.Where(p => p.Enabled).ToArray();
+        var page = WidgetPaging.LayoutPage(demo, p => p.Id, previewPage, options.WidgetItemsPerPage, options.WidgetLayout, options.WidgetPlacements);
         var grid = new Grid();
-        for (int i = 0; i < (options.WidgetLayout == "twoRows" ? 2 : 1); i++) grid.RowDefinitions.Add(new RowDefinition());
-        int columns = options.WidgetLayout == "twoRows" ? (page.Count + 1) / 2 : page.Count;
-        for (int i = 0; i < columns; i++) grid.ColumnDefinitions.Add(new ColumnDefinition());
-        for (int i = 0; i < page.Count; i++)
+        foreach (var row in page.GroupBy(x => x.Row))
         {
-            var cell = WidgetPaging.Cell(i, page.Count, options.WidgetLayout);
-            var label = new TextBlock { Text = page[i], TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(5), Foreground = Foreground, FontSize = 11 };
-            Grid.SetRow(label, cell.Row); Grid.SetColumn(label, cell.Column); grid.Children.Add(label);
+            var line = new Grid();
+            foreach (var cell in row)
+            {
+                line.ColumnDefinitions.Add(new ColumnDefinition());
+                var item = cell.Item;
+                string value = item.Id == "memory" ? "12/32 GiB" : item.Id == "cpu" ? "24%" : "38%";
+                var label = new TextBlock { Text = item.Label + " · " + value, ToolTip = item.Id + " · demonstrativo",
+                    TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(5, 2, 5, 2), Foreground = Foreground, FontSize = 12 };
+                Grid.SetColumn(label, cell.Column); line.Children.Add(label);
+            }
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            Grid.SetRow(line, grid.RowDefinitions.Count - 1); grid.Children.Add(line);
         }
+        if (page.Count == 0) grid.Children.Add(Label("Nenhum indicador habilitado"));
         widgetPreview.Width = options.WidgetWidth; widgetPreview.HorizontalAlignment = HorizontalAlignment.Left;
         widgetPreview.BorderBrush = Foreground; widgetPreview.Child = grid;
-        widgetPreview.ToolTip = $"Página {previewPage % WidgetPaging.PageCount(demo.Length, options.WidgetItemsPerPage) + 1} de {WidgetPaging.PageCount(demo.Length, options.WidgetItemsPerPage)} · valores demonstrativos";
+        int count = WidgetPaging.PageCount(demo.Length, options.WidgetItemsPerPage);
+        widgetPreview.ToolTip = $"Página {(count == 0 ? 0 : previewPage % count + 1)} de {count} · valores demonstrativos";
+    }
+    private string[] EnabledWidgetIds() => preferences.Indicators.Where(p => p.Enabled).Select(p => p.Id).ToArray();
+    private void RefreshWidgetRows()
+    {
+        widgetRows?.Children.Clear();
+        if (widgetRows is not null && preferences.Displays.WidgetLayout == "customRows") AddWidgetRows(widgetRows);
+    }
+    private void AddWidgetRows(StackPanel panel)
+    {
+        var ids = EnabledWidgetIds();
+        preferences.Displays.EnsurePlacements(ids);
+        for (int row = 0; row < 2; row++)
+        {
+            panel.Children.Add(Label($"Linha {row + 1}", 14));
+            var items = preferences.Displays.WidgetPlacements.Where(x => x.Row == row && ids.Contains(x.Id)).ToArray();
+            if (items.Length == 0) panel.Children.Add(Label("Vazia · não ocupa altura no widget"));
+            for (int i = 0; i < items.Length; i++)
+            {
+                var item = items[i];
+                var line = new StackPanel { Orientation = Orientation.Horizontal };
+                line.Children.Add(new TextBlock { Text = preferences.Indicators.First(p => p.Id == item.Id).Label,
+                    Width = 190, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, ToolTip = item.Id });
+                foreach (int direction in new[] { -1, 1 })
+                {
+                    int move = direction;
+                    var button = new Button { Content = move < 0 ? "←" : "→", IsEnabled = move < 0 ? i > 0 : i < items.Length - 1,
+                        Margin = new Thickness(3), Padding = new Thickness(8, 2, 8, 2) };
+                    button.Click += (_, _) => { preferences.Displays.MoveWidget(item.Id, move, ids); previewPage = 0; Render(); };
+                    line.Children.Add(button);
+                }
+                var changeRow = new Button { Content = "Mover para linha " + (2 - row), Margin = new Thickness(3), Padding = new Thickness(8, 2, 8, 2) };
+                changeRow.Click += (_, _) => { preferences.Displays.ChangeWidgetRow(item.Id, ids); previewPage = 0; Render(); };
+                line.Children.Add(changeRow); panel.Children.Add(line);
+            }
+        }
     }
     private void Number(StackPanel panel, string title, int value, int minimum, int maximum, Action<int> changed)
     {
@@ -189,6 +248,8 @@ internal sealed class SettingsWindow : Window
     {
         int index = preferences.Indicators.FindIndex(p => p.Id == id);
         if (index >= 0) preferences.Indicators[index] = change(preferences.Indicators[index]);
+        RefreshWidgetRows();
+        PreviewWidget();
     }
     private CheckBox Toggle(string title, bool value, Action<bool> changed)
     {

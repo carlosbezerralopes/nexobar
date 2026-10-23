@@ -1,10 +1,12 @@
-# NexoBar para WidBar — companion 0.4.0
+# NexoBar para WidBar — companion 0.5.0
 
 Plugin WinUI 3 real, derivado de `WidgetPluginBase`, com bootstrap `WidgetHostApplication`. Usa **WidBar.SDK 2.1.0** e **Microsoft.WindowsAppSDK 2.3.1** oficiais. O contrato de descoberta permanece SDK **2**. O companion tem executável e MSIX próprios; o aplicativo NexoBar principal continua sendo o único coletor e deve estar aberto. Não ativa o principal nem consulta clientes de IA.
 
-No NexoBar, habilite **WidBar** e selecione indicadores, ordem, 1–4 itens por página, horizontal/duas linhas, largura (120–600 px lógicos), rotação (2–60 s) e pausa ao passar o ponteiro. O plugin lê essas opções da ponte; a janela de configuração do host explica onde editá-las, sem outra cópia de preferências. Faixa e bandeja podem continuar habilitadas independentemente.
+No NexoBar, habilite **WidBar** e selecione indicadores, ordem, 1–8 itens por página, horizontal/duas linhas ou layout personalizado (`customRows`), largura global (120–600 px lógicos), rotação (2–60 s) e pausa ao passar o ponteiro. Em **Personalizar barra → WidBar**, mova cada indicador entre linhas e altere sua ordem. O preset coloca CPU e memória na linha superior e Claude, Codex e Kiro na inferior, com cinco itens por página; a seleção dos indicadores permanece nas opções correspondentes. Faixa e bandeja podem continuar habilitadas independentemente.
 
-O preview usa controles WinUI com cores do tema e raiz transparente. Clique captura o ID do indicador e abre somente seu detalhe; a rotação pausa durante o flyout. A opção de duas linhas preenche cada coluna de cima para baixo. Quotas exibem exclusivamente janelas informadas pelo aplicativo; temperatura e memória nominal dependem dos dados/seleções reais. Sem fonte ou snapshot recente: **indisponível**. Altura, DPI misto, contraste alto e layouts de quatro itens precisam de revisão no host físico.
+O plugin recebe a organização pela ponte e usa os mesmos ícones vetoriais das fontes Mac. Nas opções de cada instância no host, escolha **Herdar largura do NexoBar** ou uma largura própria entre 120 e 600 px, além de mostrar nomes. Salvar confirma e Cancelar restaura o estado anterior pelo contrato do host; a prévia usa valores demonstrativos. O host pode limitar a largura disponível na taskbar. No teste 0.5, o preset 2+3 foi aplicado e o JSON confirmou os cinco IDs com largura 402 px. O host reabriu “Em execução” e as opções do companion mostraram ícones CPU/RAM/Claude/Codex/Kiro em 2+3. Largura própria de 305 px foi testada; após Cancelar, reabrir mostrou herança de 402 px, e Salvar com herança foi executado. Layout real na taskbar, rotação, hover e cliques permanecem pendentes.
+
+O preview usa controles WinUI com cores do tema e raiz transparente. Clique captura o ID do indicador e abre somente seu detalhe; a rotação pausa durante o flyout. A opção automática de duas linhas preenche cada coluna de cima para baixo; o layout personalizado preserva a linha e ordem de cada ID. Quotas exibem exclusivamente janelas informadas pelo aplicativo; temperatura e memória nominal dependem dos dados/seleções reais. Sem fonte ou snapshot recente: **indisponível**. Altura, DPI misto, contraste alto e layouts de 1–8 itens precisam de revisão no host físico.
 
 ## Bridge sem persistência
 
@@ -26,13 +28,17 @@ O script executa as fixtures de pipe, restaura as dependências, compila/publica
 
 O script não instala WidBar, não habilita Developer Mode, não cria/trusta certificado, não assina nem instala o MSIX. Assinatura/deploy exigem identidade e certificado próprios, aprovados fora deste build. WidBar precisa ser instalado separadamente pelo usuário para execução física.
 
+O [instalador NexoBar](../setup/README.md) incorpora o companion assinado e orienta host/confiança com consentimento; sua instalação real ainda não foi validada. O candidato preview tem assinatura local de teste, sem reputação pública comprovada.
+
 Para conferir C# contra os assemblies reais do SDK no macOS/Linux:
 
 ```powershell
 pwsh -NoProfile -File windows/widbar/build.ps1 -ContractOnly
 ```
 
-Esse modo produz uma biblioteca de verificação; exclui apenas bootstrap e compilação XAML/PRI. Não é um plugin executável empacotado. A compilação C# foi validada no macOS; WinUI/XAML e MakeAppx passaram nativamente em Windows 11 x64 com .NET 10.0.402. Um MSIX 0.4.0.0 foi assinado com certificado local de teste `CN=NexoBar`, com validade de 30 dias e chave privada não exportável, verificado após confiança autorizada e instalado. O host oficial WidBar 1.2.8.0 também foi instalado. Isso não comprova descoberta/execução visual do plugin nem distribuição pública. GUI, layouts, rotação, cliques, DPI e ACL entre usuários continuam pendentes. As fixtures de pipe não chamam CLIs autenticadas nem sensores. Veja a [matriz de evidências](../docs/VALIDATION.md).
+Esse modo produz uma biblioteca de verificação; exclui apenas bootstrap e compilação XAML/PRI. Não é um plugin executável empacotado. A compilação C# foi validada no macOS; WinUI/XAML e MakeAppx passaram nativamente em Windows 11 x64 com .NET 10.0.402. O MSIX 0.5 foi compilado, assinado com certificado local de teste, verificado e instalado; a consulta do pacote confirmou versão 0.5.0.0 e status normal. Passaram 60 checks de ponte/configuração/vetores, sem CLIs autenticadas ou sensores.
+
+Na validação anterior, o MSIX 0.4.0.0 foi assinado com certificado de teste `CN=NexoBar`, validade de 30 dias e chave privada não exportável, verificado após confiança autorizada e instalado. No host oficial WidBar 1.2.8.0, o plugin foi descoberto/adicionado, mostrou “Em execução” e o NexoBar indicou cliente da ponte ativo. A atualização 0.5 reabriu em execução e teve a configuração visual revisada conforme descrito acima; taskbar, rotação, hover, cliques, DPI e ACL entre usuários continuam pendentes. Veja a [matriz de evidências](../docs/VALIDATION.md).
 
 ## Fontes e licença
 

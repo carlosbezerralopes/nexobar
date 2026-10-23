@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "nexobar.setup.core": {
+        "type": "Project"
+      }
+    }
+  }
+}

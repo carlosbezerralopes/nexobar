@@ -1,6 +1,5 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using System.Drawing.Text;
 using System.Runtime.InteropServices;
 using NexoBar.Core;
 using Forms = System.Windows.Forms;
@@ -30,9 +29,8 @@ internal sealed class IndicatorTray(Action<string> detail, Action settings, Acti
         {
             var reading = readings.First(r => r.Id == pref.Id);
             string value = reading.Unavailable is null ? Presentation.Percent(reading.Percent).Replace("%", "", StringComparison.Ordinal) : "—";
-            string glyph = Glyph(pref.Id, reading.Vendor);
             string tooltip = Tooltip(pref, reading, preferences);
-            string key = $"{light}|{size}|{glyph}|{value}|{tooltip}";
+            string key = $"{light}|{size}|{value}|{tooltip}";
             if (!entries.TryGetValue(pref.Id, out var entry))
             {
                 string id = pref.Id;
@@ -47,7 +45,7 @@ internal sealed class IndicatorTray(Action<string> detail, Action settings, Acti
                 entries[id] = entry;
             }
             if (entry.Key == key) continue;
-            var image = Render(glyph, value, size, light);
+            var image = Render(value, size, light);
             var old = entry.Image;
             entry.Notify.Icon = image; entry.Image = image;
             entry.Notify.Text = tooltip;
@@ -56,37 +54,46 @@ internal sealed class IndicatorTray(Action<string> detail, Action settings, Acti
             old?.Dispose();
         }
     }
-    private static string Glyph(string id, GpuVendor vendor) => id switch
-    {
-        "cpu" => "C", "memory" => "M", "claude" => "Cl", "codex" => "Cx", "kiro" => "K",
-        "copilot" => "Co", "antigravity" => "An", "cursor" => "Cu", "grok" => "Gr", "opencode" => "Op", "glm" => "Gl",
-        _ when id.StartsWith("gpu:", StringComparison.Ordinal) => vendor switch { GpuVendor.Nvidia => "N", GpuVendor.Amd => "A", GpuVendor.Intel => "I", _ => "G" },
-        _ => "N"
-    };
     private static string Tooltip(IndicatorPreference pref, Reading reading, Preferences preferences)
     {
         string value = reading.Unavailable ?? (Preferences.Providers.Contains(pref.Id) ?
             string.Join(" | ", Presentation.QuotaLines(reading, preferences, DateTimeOffset.UtcNow)) : Presentation.Metric(reading, pref, preferences));
-        string text = new((pref.Label + " · " + value).Where(c => !char.IsControl(c)).ToArray());
+        string label = pref.Label;
+        if (pref.Id.StartsWith("gpu:", StringComparison.Ordinal) && GpuBrand.Wordmark(reading.Vendor) is { } brand &&
+            !label.Contains(brand, StringComparison.OrdinalIgnoreCase)) label += " (" + brand + ")";
+        string text = new((label + " · " + value).Where(c => !char.IsControl(c)).ToArray());
         if (text.Length <= 127) return text;
         int length = char.IsHighSurrogate(text[126]) ? 126 : 127;
         return text[..length];
     }
-    private static Icon Render(string glyph, string value, int size, bool light)
+    internal static Bitmap RenderBitmap(string value, int size, bool light)
     {
         // Render at taskbar DPI, with an opaque foreground and transparent background.
-        using var bitmap = new Bitmap(size, size, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        var bitmap = new Bitmap(size, size, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
         using var graphics = Graphics.FromImage(bitmap);
         graphics.Clear(Color.Transparent); graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        graphics.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
         using var brush = new SolidBrush(light ? Color.FromArgb(20, 20, 20) : Color.FromArgb(248, 248, 248));
-        using var small = new Font("Segoe UI", size * .34f, FontStyle.Bold, GraphicsUnit.Pixel);
-        using var large = new Font("Segoe UI", size * .49f, FontStyle.Bold, GraphicsUnit.Pixel);
-        using var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center, FormatFlags = StringFormatFlags.NoWrap };
-        graphics.DrawString(glyph, small, brush, new RectangleF(0, -size * .04f, size, size * .45f), format);
-        float measured = graphics.MeasureString(value, large).Width;
-        using var fitted = new Font("Segoe UI", large.Size * Math.Min(1, size / measured), FontStyle.Bold, GraphicsUnit.Pixel);
-        graphics.DrawString(value, fitted, brush, new RectangleF(0, size * .35f, size, size * .7f), format);
+        using var family = new FontFamily("Segoe UI");
+        using var format = new StringFormat(StringFormat.GenericTypographic) { FormatFlags = StringFormatFlags.NoWrap };
+        using var path = new GraphicsPath();
+        path.AddString(value, family, (int)FontStyle.Bold, size, PointF.Empty, format);
+        // Fit actual glyph ink, without GDI+ layout margins; keep the aspect ratio of 100 and <1.
+        var bounds = path.GetBounds();
+        if (bounds.Width > 0 && bounds.Height > 0)
+        {
+            float available = size - 1;
+            float scale = Math.Min(available / bounds.Width, available / bounds.Height);
+            using var transform = new Matrix(scale, 0, 0, scale,
+                (size - bounds.Width * scale) / 2 - bounds.X * scale,
+                (size - bounds.Height * scale) / 2 - bounds.Y * scale);
+            path.Transform(transform);
+            graphics.FillPath(brush, path);
+        }
+        return bitmap;
+    }
+    private static Icon Render(string value, int size, bool light)
+    {
+        using var bitmap = RenderBitmap(value, size, light);
         IntPtr handle = bitmap.GetHicon();
         try { using var borrowed = Icon.FromHandle(handle); return (Icon)borrowed.Clone(); }
         finally { DestroyIcon(handle); }
