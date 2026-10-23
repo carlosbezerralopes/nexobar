@@ -1,4 +1,6 @@
-# NexoBar para WidBar — companion 0.6.0
+# NexoBar para WidBar — companion 0.6.1
+
+O patch permite a consulta inicial da ponte quando o host inicia com preview oculto e o estado habilitado ainda é desconhecido. Depois da primeira resposta, preserva a política de habilitação/visibilidade. Essa correção de bootstrap não comprova a causa de oclusão ou visibilidade na taskbar; seu aceite nativo é separado.
 
 Plugin WinUI 3 real, derivado de `WidgetPluginBase`, com bootstrap `WidgetHostApplication`. Usa **WidBar.SDK 2.1.0** e **Microsoft.WindowsAppSDK 2.3.1** oficiais. O contrato de descoberta permanece SDK **2**. O companion tem executável e MSIX próprios; o aplicativo NexoBar principal continua sendo o único coletor e deve estar aberto. Não ativa o principal nem consulta clientes de IA.
 

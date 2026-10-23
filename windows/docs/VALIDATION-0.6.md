@@ -14,3 +14,21 @@ SHA256 dos artefatos assinados:
 A instalação 0.6 e a medição do preview hospedado ainda não foram concluídas: a sessão gráfica ficou indisponível para controle/captura. Fixtures geométricas não comprovam ausência de corte ou oclusão externa na taskbar. A assinatura local de teste não equivale a reputação pública de distribuição.
 
 Este registro complementa os documentos incorporados aos pacotes, que refletem as etapas anteriores à verificação final. Recursos e diferenças remanescentes estão em [PARITY-0.6.md](PARITY-0.6.md).
+
+## Atualização 0.6.1 — testes sem Computer Use
+
+A instalação 0.6.0 foi posteriormente concluída e preservou preferências. Durante a validação foi encontrado um caso de inicialização: o preview inicialmente oculto não procurava o aplicativo enquanto o estado de habilitação era desconhecido. A versão 0.6.1 mantém essa descoberta até receber a primeira configuração. Três verificações adicionais cobrem estado desconhecido, ausência inicial e recuperação; total atual: 537 checks (261 núcleo, 108 ponte, 83 descoberta/ConPTY, 85 instalador).
+
+Em 23/10/2026, a atualização 0.6.1 foi aplicada sem controle de tela por um runner que referencia os assemblies compilados do instalador e executa `InstallTransaction` e `PackageDeployment`. O verificador confirmou integridade e confiança antes da instalação. O recibo indica 0.6.1; os 529 arquivos instalados coincidiram com o manifesto; o MSIX instalado é 0.6.1.0, status Ok. Preferências foram comparadas semanticamente e preservadas, a versão anterior permaneceu e a inicialização automática continuou desativada.
+
+Com o aplicativo instalado em execução, a leitura do pipe confirmou Claude disponível com duas janelas de conta (e uma por modelo), Codex com uma janela, largura 402, cinco componentes, gap 4, cotas empilhadas e renovação habilitada. Posições preservadas: CPU/memória na primeira linha e Claude/Codex/Kiro na segunda. NexoBar, WidBar e companion foram observados em execução. Kiro retornou indisponível nessa rodada; não foi substituído por zero.
+
+A leitura do pipe comprova os dados oferecidos ao companion, não seu consumo nem a aparência final no host. O teste visual final e a ausência de corte na taskbar permanecem não verificados, por opção de testar sem Computer Use. Temperaturas físicas continuam indisponíveis nesta máquina.
+
+Artefatos finais 0.6.1 (SHA256):
+
+- Setup assinado: `b4ce349b758d5fed5fbc951751707e036d18435b6c4bca225ee5885f73fb1c2e`.
+- MSIX assinado: `ec23400d23ab1791b842105066085f984f30fb8d343e31156b16aec47e611eaf`.
+- ZIP portátil: `029c0863c92f36bc1a7864c87eb150a2dfd6fb0fddfffcf2e575910ae7281731`.
+
+Os documentos incorporados aos pacotes precedem esta verificação final. A assinatura continua sendo de teste local. O runner externo teve um aviso NU1900 de consulta de vulnerabilidades indisponível; sua compilação concluiu sem erros. Uma primeira tentativa parou antes da transação por acesso incorreto ao nó Displays no runner, corrigido antes da aplicação.

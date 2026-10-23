@@ -51,6 +51,14 @@ Check(watch.Elapsed < TimeSpan.FromSeconds(1), "server disposal cancels listener
 Check(!DisplayBridge.IsFresh(Fresh() with { Indicators=[new("cpu","CPU",null!,true)] },DateTimeOffset.UtcNow),"null reading rejected");
 var availability = new WidgetAvailabilityPolicy();
 Check(availability.IsPreviewVisible, "unknown enable state allows offline explanation");
+Check(availability.LastKnownEnabled is null && availability.KeepAvailabilityProbe,
+    "unknown enable state keeps discovery polling when host preview starts hidden");
+availability.Observe(null);
+Check(availability.LastKnownEnabled is null && availability.IsPreviewVisible && availability.KeepAvailabilityProbe,
+    "initial offline result preserves discovery until main app becomes available");
+availability.Observe(true);
+Check(availability.LastKnownEnabled == true && availability.IsPreviewVisible && !availability.KeepAvailabilityProbe,
+    "initial offline then enabled recovers configuration and permits hidden preview to pause");
 availability.Observe(false);
 availability.Observe(null);
 Check(!availability.IsPreviewVisible && availability.KeepAvailabilityProbe, "disabled then offline preserves hidden slot and probe");

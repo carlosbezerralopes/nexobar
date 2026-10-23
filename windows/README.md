@@ -1,4 +1,6 @@
-# NexoBar para Windows — preview 0.6.0
+# NexoBar para Windows — preview 0.6.1
+
+O patch 0.6.1 corrige o início da consulta à ponte quando o preview WidBar começa oculto e o estado de habilitação ainda é desconhecido. Esse estado permite a primeira consulta; uma resposta explicitamente desabilitada continua respeitada. A correção trata uma condição lógica de bootstrap e não comprova causas externas de visibilidade. O [registro 0.6.0](docs/VALIDATION-0.6.md) é histórico; build, instalação e aceite do patch são registrados separadamente.
 
 No modo portátil, extraia **todo o ZIP** em uma pasta local e abra `NexoBar.exe`. O pacote win-x64 inclui o runtime .NET 10; o usuário não precisa instalar .NET. Requer Windows 11 x64 nativo. O portátil não configura inicialização automática nem solicita elevação.
 
@@ -53,7 +55,7 @@ Pré-requisitos de desenvolvimento: PowerShell 7, .NET SDK 10 e acesso ao NuGet 
 pwsh -NoProfile -File windows/scripts/build.ps1
 ```
 
-O script roda fixtures do core e testes reais de pipe, compila o harness ConPTY sintético (e o executa somente em Windows), compila WPF code-only em `net10.0-windows` com `EnableWindowsTargeting=true`, publica `win-x64 --self-contained` e gera `dist/NexoBar-Windows-x64-preview.zip` por padrão. Use `-OutputZip` para nomear um pacote versionado, como `NexoBar-Windows-x64-0.6.0-preview.zip`. O kit-fonte WidBar é incluído separadamente; esse build não gera seu MSIX. Temporários ficam sob `TEMP/NexoBar/windows-build`; `-ArtifactsDirectory` e `-PackagesDirectory` isolam outro contexto. Não faz instalação, commit ou upload.
+O script roda fixtures do core e testes reais de pipe, compila o harness ConPTY sintético (e o executa somente em Windows), compila WPF code-only em `net10.0-windows` com `EnableWindowsTargeting=true`, publica `win-x64 --self-contained` e gera `dist/NexoBar-Windows-x64-preview.zip` por padrão. Use `-OutputZip` para nomear um pacote versionado, como `NexoBar-Windows-x64-0.6.1-preview.zip`. O kit-fonte WidBar é incluído separadamente; esse build não gera seu MSIX. Temporários ficam sob `TEMP/NexoBar/windows-build`; `-ArtifactsDirectory` e `-PackagesDirectory` isolam outro contexto. Não faz instalação, commit ou upload.
 
 O build nativo anterior 0.5 passou em Windows 11 x64 (build 26300), com .NET SDK 10.0.402: 226 checks do núcleo, 60 de ponte/configuração/vetores e 63 de ConPTY sintético. As fixtures não chamam CLIs autenticadas. Na validação anterior 0.4, os Jobs próprios terminaram sem raízes ou descendentes e handles passaram de 326 para 327 após aquecimento do runtime. O diagnóstico nativo leu CPU/RAM e identificou Intel Iris Xe, compatível com o inventário Windows; carga/temperatura GPU e temperaturas CPU ficaram indisponíveis. Apenas uma GPU física e um monitor estavam disponíveis; Microsoft Remote Display Adapter não conta como GPU física adicional.
 

@@ -6,7 +6,7 @@
 
 Indicadores de hardware e limites de uso em uma barra compacta, com interface em português e consultas pelas sessões dos clientes que você já utiliza.
 
-[macOS 0.3.1 · preview](#plataformas) · [Windows 0.6.0 · preview](#plataformas) · [Compilar](docs/BUILDING.md) · [Licença MIT](LICENSE)
+[macOS 0.3.1 · preview](#plataformas) · [Windows 0.6.1 · preview](#plataformas) · [Compilar](docs/BUILDING.md) · [Licença MIT](LICENSE)
 
 </div>
 
@@ -27,7 +27,7 @@ Uma leitura ausente aparece como indisponível. O NexoBar não transforma ausên
 |---|---|---|
 | macOS 14+ · Apple Silicon | Barra de menus nativa em AppKit/SwiftUI | 0.3.1; bundle arm64, testes automatizados e verificações físicas em Apple M5 Pro. Outros chips precisam de validação. |
 | macOS · Intel | Mesma base Swift | Exige compilação própria; execução física ainda não verificada. |
-| Windows 11 · x64 | Faixa translúcida, ícones de bandeja e companion WidBar | 0.6.0; cotas, renovação, temperatura opcional e organização descritas na [matriz 0.6](windows/docs/PARITY-0.6.md). Build, teste nativo e validação visual têm evidências separadas. |
+| Windows 11 · x64 | Faixa translúcida, ícones de bandeja e companion WidBar | 0.6.1; cotas, renovação, temperatura opcional e organização descritas na [matriz 0.6](windows/docs/PARITY-0.6.md). Build, teste nativo e validação visual têm evidências separadas. |
 | Linux | — | Não implementado. |
 
 Na validação anterior, o companion 0.5 foi compilado, assinado com certificado de teste, verificado e instalado. O host WidBar 1.2.8 reabriu “Em execução”; sua configuração mostrou cinco ícones em 2+3 e permitiu exercitar largura própria, Cancelar e Salvar com largura herdada. Essa evidência não valida a UI ou a instalação 0.6. Veja a [matriz de evidências Windows](windows/docs/VALIDATION.md) e os [recursos e limites da 0.6](windows/docs/PARITY-0.6.md).
@@ -51,7 +51,7 @@ Use um pacote preview somente quando ele estiver disponível junto à versão co
 | Pacote | Uso |
 |---|---|
 | `NexoBar-macOS-preview.zip` | Extraia e abra `NexoBar.app`. O pacote atual é arm64. A assinatura é local, sem notarização Apple. |
-| `NexoBar-Windows-x64-0.6.0-preview.zip` | Extraia para uma pasta local e abra `NexoBar.exe`. O runtime .NET é incluído. O kit-fonte do WidBar é separado do executável portátil. |
+| `NexoBar-Windows-x64-0.6.1-preview.zip` | Extraia para uma pasta local e abra `NexoBar.exe`. O runtime .NET é incluído. O kit-fonte do WidBar é separado do executável portátil. |
 | `NexoBar-Setup-x64.exe` | Instalador de arquivo único com runtime incluído. Abra, escolha faixa/bandeja/WidBar, revise o destino e confirme. Autostart é opcional. A validação da instalação 0.6 é separada do teste anterior 0.5. |
 
 Clique no indicador para abrir seu detalhe e use o menu de contexto para personalizar. No macOS, clique com o botão direito na barra. No Windows, o ícone NexoBar na bandeja permite recuperar as opções mesmo com os modos desligados; ele pode estar em “Mostrar ícones ocultos”. Fechar a configuração mantém o coletor; **Sair** encerra o aplicativo.

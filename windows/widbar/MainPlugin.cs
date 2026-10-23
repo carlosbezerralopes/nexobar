@@ -33,7 +33,7 @@ public sealed class MainPlugin : WidgetPluginBase, IConfigurableWidgetPlugin, IW
     private DateTimeOffset lastRotation = DateTimeOffset.UtcNow;
     public override string Id => "com.nexobar.indicators";
     public override string Name => "NexoBar";
-    public override string Version => "0.6.0";
+    public override string Version => "0.6.1";
     public override int PreviewLogicalWidth => instanceSettings.EffectiveWidth(snapshot?.WidgetOptions.Width ?? settingsVisualOptions?.WidgetOptions.Width);
     public override int FlyoutWidth => 390;
     public override int FlyoutHeight => 420;

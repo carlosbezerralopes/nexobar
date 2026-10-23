@@ -35,7 +35,7 @@ Requisitos de compilação: PowerShell 7, .NET SDK 10 e acesso ao NuGet oficial.
 pwsh -NoProfile -File windows/scripts/build.ps1
 ```
 
-O build executa os testes do núcleo e de pipe, compila WPF e publica `win-x64 --self-contained` em `dist/NexoBar-Windows-x64-preview.zip` por padrão; `-OutputZip` permite um nome versionado, como `NexoBar-Windows-x64-0.6.0-preview.zip`. O harness sintético ConPTY só é executado em Windows. Compilação cruzada não valida interface, sensores, CLIs autenticadas ou ciclo de processos no Windows.
+O build executa os testes do núcleo e de pipe, compila WPF e publica `win-x64 --self-contained` em `dist/NexoBar-Windows-x64-preview.zip` por padrão; `-OutputZip` permite um nome versionado, como `NexoBar-Windows-x64-0.6.1-preview.zip`. O harness sintético ConPTY só é executado em Windows. Compilação cruzada não valida interface, sensores, CLIs autenticadas ou ciclo de processos no Windows.
 
 O ZIP inclui app portátil para faixa/bandeja e kit-fonte WidBar. O construtor do companion restaura e localiza as ferramentas Windows do NuGet para gerar o MSIX; assinatura e implantação são etapas separadas. Visual Studio e Windows SDK completos não foram necessários no build nativo verificado. Veja [compilar WidBar](../windows/widbar/README.md#compilar).
 
