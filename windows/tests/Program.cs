@@ -288,4 +288,68 @@ var persistedCustom = new Preferences { Displays = custom }; persistedCustom.Sav
 var loadedCustom = Preferences.Load(path);
 Check(loadedCustom.Displays.WidgetPlacements.SequenceEqual(custom.WidgetPlacements) && loadedCustom.Displays.WidgetLayout == "customRows" &&
     loadedCustom.Displays.WidgetItemsPerPage == 5 && loadedCustom.Displays.WidgetWidth == 402, "custom placement preferences roundtrip without migration loss");
+// P01: additive presentation contract and existing-profile compatibility.
+Check(new Preferences().ShowQuotaReset && new DisplayOptions().WidgetRowGap == 4 &&
+    new IndicatorPreference("cpu", "CPU").ShowTemperature, "additive presentation defaults preserve existing behavior");
+var contractReading = new Reading("claude", "Claude", now, Windows:
+    [new("session", "Sessão", 0, now.AddHours(3)), new("weekly_all", "Semanal", 38, null),
+        new("model", "Modelo", 99, now.AddDays(1), AccountWindow: false)]);
+foreach (bool labels in new[] { false, true })
+foreach (bool reset in new[] { false, true })
+foreach (bool stacked in new[] { false, true })
+{
+    var result = Presentation.QuotaDisplayLines(contractReading, now, stacked, labels, reset, true);
+    string[] expected = [(labels ? "Sessão " : "") + "0%" + (reset ? " · 3h0m" : ""),
+        (labels ? "Semanal " : "") + "38%"];
+    Check(result.SequenceEqual(stacked ? expected : [string.Join("  |  ", expected)]),
+        $"quota matrix labels={labels} reset={reset} stacked={stacked}");
+    var p01prefs = new Preferences { StackedQuotas = stacked, ShowQuotaReset = reset, DetailedCountdown = true };
+    Check(Presentation.QuotaLines(contractReading, p01prefs, now).SequenceEqual(
+        Presentation.QuotaDisplayLines(contractReading, now, stacked, true, reset, true)), "bar uses shared formatter " + reset + stacked + labels);
+}
+foreach (bool stacked in new[] { false, true })
+{
+    var weeklyCodex = contractReading with { Id = "codex", Windows = [new("week", "Semanal", 38, null)] };
+    Check(Presentation.QuotaDisplayLines(weeklyCodex, now, stacked, false, true, false).SequenceEqual(new[] { "38%" }),
+        "weekly-only Codex one real line stacked=" + stacked);
+    Check(Presentation.QuotaDisplayLines(contractReading with { Windows = [new("model", "Modelo", 99, null, AccountWindow: false)] },
+        now, stacked, false, true, false).SequenceEqual(new[] { "—" }), "model window never account fallback stacked=" + stacked);
+}
+Check(Presentation.QuotaDisplayLines(contractReading with { Windows = [new("week", "Semanal", null, null)] },
+    now, true, false, true, true).SequenceEqual(new[] { "—" }), "unknown percentage and absent reset remain unknown");
+Check(Presentation.QuotaDisplayLines(contractReading with { Unavailable = "failure" }, now, true, false, true, true)
+    .SequenceEqual(new[] { "—" }), "unavailable ignores numbers and resets");
+Check(Presentation.QuotaDisplayLines(contractReading with { Windows = [new("session", "Sessão", 0, now)] },
+    now, true, false, true, true).SequenceEqual(new[] { "0% · aguardando confirmação" }), "expired reset never claims renewal");
+const string oldProfile = """
+{"SchemaVersion":1,"MonitorId":"monitor-fixture","ClaudeWorkingDirectory":"C:/fixture/claude","CodexWorkingDirectory":"C:/fixture/codex",
+ "MemoryNominal":false,"StackedQuotas":true,"DetailedCountdown":true,"ResetAlerts":true,
+ "Displays":{"WidgetWidth":402,"WidgetItemsPerPage":5,"WidgetLayout":"customRows","WidgetEnabled":true,
+ "WidgetPlacements":[{"Id":"cpu","Row":0,"Order":0},{"Id":"memory","Row":0,"Order":1},{"Id":"claude","Row":1,"Order":0},{"Id":"codex","Row":1,"Order":1},{"Id":"kiro","Row":1,"Order":2}]},
+ "Indicators":[{"Id":"codex","Label":"Codex personalizado","Enabled":false,"ShowTemperature":true},{"Id":"cpu","Label":"Processador","Enabled":true,"ShowTemperature":false}]}
+""";
+File.WriteAllText(path, oldProfile);
+var oldLoaded = Preferences.Load(path);
+Check(File.ReadAllText(path) == oldProfile, "loading old preferences does not rewrite file");
+Check(oldLoaded.SchemaVersion == 1 && oldLoaded.ShowQuotaReset && oldLoaded.Displays.WidgetRowGap == 4,
+    "old JSON gets additive defaults without schema change");
+Check(oldLoaded.MonitorId == "monitor-fixture" && oldLoaded.ClaudeWorkingDirectory == "C:/fixture/claude" &&
+    oldLoaded.CodexWorkingDirectory == "C:/fixture/codex" && !oldLoaded.MemoryNominal && oldLoaded.StackedQuotas &&
+    oldLoaded.DetailedCountdown && oldLoaded.ResetAlerts, "old profile keeps monitor folders and presentation choices");
+Check(oldLoaded.Indicators.Take(2).SequenceEqual(new[] {new IndicatorPreference("codex", "Codex personalizado", false),
+    new IndicatorPreference("cpu", "Processador", true, false)}), "old profile keeps order labels enabled and CPU temperature off");
+Check(oldLoaded.Displays.WidgetWidth == 402 && oldLoaded.Displays.WidgetPlacements.SequenceEqual(new[] {
+    new WidgetPlacement("cpu",0,0), new("memory",0,1), new("claude",1,0), new("codex",1,1), new("kiro",1,2) }),
+    "old profile keeps width 402 and exact 2+3 placements");
+oldLoaded.ShowQuotaReset = false; oldLoaded.Displays.WidgetRowGap = 12; oldLoaded.Save(path);
+var newLoaded = Preferences.Load(path);
+Check(!newLoaded.ShowQuotaReset && newLoaded.Displays.WidgetRowGap == 12 && newLoaded.Displays.WidgetWidth == 402 &&
+    newLoaded.Indicators.SequenceEqual(oldLoaded.Indicators) && newLoaded.Displays.WidgetPlacements.SequenceEqual(oldLoaded.Displays.WidgetPlacements),
+    "new presentation fields roundtrip without changing existing profile");
+foreach (var (input, expected) in new[] { (-1,0), (0,0), (4,4), (12,12), (13,12) })
+{
+    var gapOptions = new DisplayOptions { WidgetRowGap = input }; gapOptions.Normalize();
+    Check(gapOptions.WidgetRowGap == expected && new DisplayWidgetOptions(RowGap:input).Normalize().RowGap == expected,
+        "row gap clamps equally preferences and bridge " + input);
+}
 Console.WriteLine($"SUCCESS {count} checks; no authenticated CLI or native Windows calls executed.");

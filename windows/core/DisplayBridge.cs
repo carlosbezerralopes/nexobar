@@ -8,16 +8,16 @@ namespace NexoBar.Core;
 
 public sealed record DisplayWidgetOptions(int ItemsPerPage = 2, string Layout = "horizontal",
     int RotationSeconds = 5, bool Rotate = true, int Width = 320, bool PauseOnHover = true,
-    IReadOnlyList<WidgetPlacement>? Placements = null)
+    IReadOnlyList<WidgetPlacement>? Placements = null, int RowGap = 4)
 {
     public DisplayWidgetOptions Normalize() => this with { ItemsPerPage = Math.Clamp(ItemsPerPage, 1, 8),
         Layout = WidgetPaging.NormalizeLayout(Layout), RotationSeconds = Math.Clamp(RotationSeconds, 2, 60),
-        Width = Math.Clamp(Width, 120, 600), Placements = WidgetPaging.NormalizePlacements(Placements) };
+        Width = Math.Clamp(Width, 120, 600), RowGap = Math.Clamp(RowGap, 0, 12), Placements = WidgetPaging.NormalizePlacements(Placements) };
 }
 public sealed record DisplayIndicator(string Id, string Label, Reading Reading, bool ShowTemperature);
 public sealed record DisplaySnapshot(int SchemaVersion, DateTimeOffset CapturedAt, bool WidgetEnabled,
     DisplayWidgetOptions WidgetOptions, IReadOnlyList<DisplayIndicator> Indicators,
-    bool MemoryNominal, bool StackedQuotas, bool DetailedCountdown);
+    bool MemoryNominal, bool StackedQuotas, bool DetailedCountdown, bool ShowQuotaReset = true);
 
 /// <summary>One length-prefixed JSON response per connection; never accepts commands or writes quota data.</summary>
 public static class DisplayBridge

@@ -23,7 +23,7 @@ public sealed class SetupWindow : Window
     static CheckBox Choice(string label) => new() { Content = label, Margin = new Thickness(0, 7, 0, 7) };
     public SetupWindow()
     {
-        Title = "Instalar NexoBar 0.5.0"; Width = 700; Height = 650; MinWidth = 600; MinHeight = 480; WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        Title = "Instalar NexoBar 0.6.0"; Width = 700; Height = 650; MinWidth = 600; MinHeight = 480; WindowStartupLocation = WindowStartupLocation.CenterScreen;
         Content = new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         body.Children.Add(new TextBlock { Text = "NexoBar", FontSize = 30, FontWeight = FontWeights.SemiBold });
         body.Children.Add(new TextBlock { Text = "Hardware e cotas à vista · Windows 11 x64", Margin = new Thickness(0, 4, 0, 18) });

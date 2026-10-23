@@ -16,6 +16,7 @@ public sealed class DisplayOptions
     public int WidgetRotationSeconds { get; set; } = 5;
     public bool WidgetRotate { get; set; } = true;
     public int WidgetWidth { get; set; } = 320;
+    public int WidgetRowGap { get; set; } = 4;
     public bool WidgetPauseOnHover { get; set; } = true;
     public List<WidgetPlacement> WidgetPlacements { get; set; } = [];
     public void Normalize()
@@ -25,6 +26,7 @@ public sealed class DisplayOptions
         WidgetLayout = WidgetPaging.NormalizeLayout(WidgetLayout);
         WidgetRotationSeconds = Math.Clamp(WidgetRotationSeconds, 2, 60);
         WidgetWidth = Math.Clamp(WidgetWidth, 120, 600);
+        WidgetRowGap = Math.Clamp(WidgetRowGap, 0, 12);
         WidgetPlacements = WidgetPaging.NormalizePlacements(WidgetPlacements).ToList();
     }
 

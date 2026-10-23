@@ -15,6 +15,8 @@ internal sealed class OwnedCommand : IDisposable
     private static readonly object spawnGate = new();
     internal static string? Locate(string binary)
     {
+        if (binary == "claude") return LocateClaudeNative(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            Environment.GetEnvironmentVariable("PATH"), Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData));
         string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         string[] directories = [Path.Combine(home, ".local", "bin"), Path.Combine(home, ".cargo", "bin"),
             .. (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)];
@@ -26,6 +28,42 @@ internal sealed class OwnedCommand : IDisposable
                 catch (Exception e) when (e is ArgumentException or NotSupportedException) { continue; }
                 if (File.Exists(path)) return path;
             }
+        return null;
+    }
+    internal static string? LocateClaudeNative(string home, string? searchPath, string appData)
+    {
+        string[] prefixes = (searchPath ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
+        string[] directories = [Path.Combine(home, ".local", "bin"), Path.Combine(home, ".cargo", "bin"), .. prefixes];
+        foreach (string directory in directories)
+        {
+            try
+            {
+                string path = Path.GetFullPath(Path.Combine(directory.Trim('"'), "claude.exe"));
+                if (File.Exists(path)) return path;
+            }
+            catch (Exception e) when (e is ArgumentException or NotSupportedException or IOException or UnauthorizedAccessException) { }
+        }
+        // npm's Windows shim is never executed. Only the known package's fixed native entry is eligible.
+        foreach (string prefix in prefixes.Append(Path.Combine(appData, "npm")))
+        {
+            try
+            {
+                string package = Path.GetFullPath(Path.Combine(prefix.Trim('"'), "node_modules", "@anthropic-ai", "claude-code"));
+                string bin = Path.Combine(package, "bin"), executable = Path.Combine(bin, "claude.exe");
+                if (!File.Exists(executable)) continue;
+                // Reject redirected package components too: the fixed entry must remain inside this package.
+                if (new[] { Path.GetDirectoryName(Path.GetDirectoryName(package)!)!, Path.GetDirectoryName(package)!, package, bin, executable, Path.Combine(package, "package.json") }
+                    .Any(p => (File.GetAttributes(p) & FileAttributes.ReparsePoint) != 0)) continue;
+                using var manifest = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(package, "package.json")));
+                var root = manifest.RootElement;
+                if (root.ValueKind != System.Text.Json.JsonValueKind.Object ||
+                    !root.TryGetProperty("name", out var name) || name.ValueKind != System.Text.Json.JsonValueKind.String || name.GetString() != "@anthropic-ai/claude-code" ||
+                    !root.TryGetProperty("bin", out var entries) || entries.ValueKind != System.Text.Json.JsonValueKind.Object ||
+                    !entries.TryGetProperty("claude", out var entry) || entry.ValueKind != System.Text.Json.JsonValueKind.String || entry.GetString() != "bin/claude.exe") continue;
+                return executable;
+            }
+            catch (Exception e) when (e is ArgumentException or NotSupportedException or IOException or UnauthorizedAccessException or System.Text.Json.JsonException) { }
+        }
         return null;
     }
     internal async Task<string> Run(string binary, string[] args, bool rpc, CancellationToken cancellation, string? workingDirectory = null)

@@ -26,9 +26,7 @@ internal sealed class ClaudeConPty : IDisposable
     internal Task<Reading> Read(string? directory, CancellationToken cancellation)
     {
         string folder = CLIWorkingDirectories.Require(directory, "Claude");
-        string binary = OwnedCommand.Locate("claude") ?? throw new IOException("Claude Code não instalado");
-        // Native Claude installer is required. A cmd shim would add shell parsing to the fixed JSON arguments.
-        if (!binary.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) throw new IOException("Instale o executável nativo Claude Code");
+        string binary = OwnedCommand.Locate("claude") ?? throw new IOException("Executável nativo Claude Code indisponível");
         return Run(binary, Arguments, folder, cancellation, TimeSpan.FromSeconds(45));
     }
     // Internal synthetic harness entry only; never exposed through preferences or CLI arguments.

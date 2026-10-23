@@ -11,8 +11,16 @@ namespace NexoBar.Widget;
 public sealed class MainPlugin : WidgetPluginBase, IConfigurableWidgetPlugin, IWidgetFlyoutLifecycle
 {
     private Grid? preview;
+    private readonly WidgetPreviewRenderer renderer = new();
+    private PreviewLayoutMeasurement? measurement;
+    private bool measurementDirty, measurementCurrent;
+    private int generation, layoutRevision;
+    private string? layoutShape;
+    private event Action? PreviewChanged;
     private StackPanel? detail;
+    private readonly List<(TextBlock Text, DateTimeOffset Reset)> detailCountdowns = [];
     private DisplaySnapshot? snapshot;
+    private DisplaySnapshot? settingsVisualOptions;
     private WidgetInstanceSettings instanceSettings = WidgetInstanceSettings.Parse(null);
     private readonly WidgetAvailabilityPolicy availability = new();
     private readonly DispatcherQueue dispatcher = DispatcherQueue.GetForCurrentThread();
@@ -25,8 +33,8 @@ public sealed class MainPlugin : WidgetPluginBase, IConfigurableWidgetPlugin, IW
     private DateTimeOffset lastRotation = DateTimeOffset.UtcNow;
     public override string Id => "com.nexobar.indicators";
     public override string Name => "NexoBar";
-    public override string Version => "0.5.0";
-    public override int PreviewLogicalWidth => instanceSettings.EffectiveWidth(snapshot?.WidgetOptions.Width);
+    public override string Version => "0.6.0";
+    public override int PreviewLogicalWidth => instanceSettings.EffectiveWidth(snapshot?.WidgetOptions.Width ?? settingsVisualOptions?.WidgetOptions.Width);
     public override int FlyoutWidth => 390;
     public override int FlyoutHeight => 420;
     // Offline is visible with an explanation. Explicitly disabled releases the slot.
@@ -42,9 +50,14 @@ public sealed class MainPlugin : WidgetPluginBase, IConfigurableWidgetPlugin, IW
     }
     public override UIElement? CreatePreviewContent()
     {
+        DisconnectPreview();
+        generation++;
         preview = new Grid { Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
-        preview.PointerEntered += (_, _) => hover = true;
-        preview.PointerExited += (_, _) => { hover = false; lastRotation = DateTimeOffset.UtcNow; };
+        preview.Loaded += PreviewLoaded; preview.Unloaded += PreviewUnloaded;
+        preview.SizeChanged += PreviewSizeChanged; preview.LayoutUpdated += PreviewLayoutUpdated;
+        hover = false;
+        preview.PointerEntered += PreviewPointerEntered;
+        preview.PointerExited += PreviewPointerExited;
         Render();
         return preview;
     }
@@ -55,7 +68,8 @@ public sealed class MainPlugin : WidgetPluginBase, IConfigurableWidgetPlugin, IW
         return new ScrollViewer { Content = detail, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
     }
     public UIElement? CreateSettingsContent(IWidgetSettingsContext context) => new WidgetSettingsView(context,
-        WidgetInstanceSettings.Parse(context.SettingsJson), snapshot?.WidgetOptions.Width ?? 320);
+        WidgetInstanceSettings.Parse(context.SettingsJson), () => settingsVisualOptions, ReadMeasurement,
+        listener => { PreviewChanged += listener; return () => PreviewChanged -= listener; });
     public override void OnSettingsDraftChanged(string settingsJson)
     {
         // WidBar also calls this with the original JSON on Cancel. Never persist from this callback.
@@ -76,7 +90,53 @@ public sealed class MainPlugin : WidgetPluginBase, IConfigurableWidgetPlugin, IW
         lastRotation = DateTimeOffset.UtcNow;
         SetActive(Context?.IsPreviewVisible ?? false);
     }
-    private void VisibilityChanged(object? sender, bool visible) => SetActive(visible || flyoutOpen);
+    private void VisibilityChanged(object? sender, bool visible)
+    {
+        if (!visible) InvalidateMeasurement(); else measurementDirty = true;
+        SetActive(visible || flyoutOpen);
+    }
+    private string ReadMeasurement() => measurement?.Caption(measurementCurrent &&
+        measurement.Generation == generation && measurement.LayoutRevision == layoutRevision) ??
+        "Altura do preview ainda não medida. Exiba o widget para conferir o espaço.";
+    private void InvalidateMeasurement()
+    {
+        measurementCurrent = false;
+        measurement = measurement?.Invalidate();
+        PreviewChanged?.Invoke();
+    }
+    private void PreviewLoaded(object sender, RoutedEventArgs e) => measurementDirty = true;
+    private void PreviewUnloaded(object sender, RoutedEventArgs e) => InvalidateMeasurement();
+    private void PreviewSizeChanged(object sender, SizeChangedEventArgs e) => measurementDirty = true;
+    private void PreviewPointerEntered(object sender, PointerRoutedEventArgs e) => hover = true;
+    private void PreviewPointerExited(object sender, PointerRoutedEventArgs e)
+    { hover = false; lastRotation = DateTimeOffset.UtcNow; }
+    private void PreviewLayoutUpdated(object? sender, object e)
+    {
+        if (!measurementDirty || preview is null) return;
+        measurementDirty = false;
+        bool visible = Context?.IsPreviewVisible == true && snapshot?.WidgetEnabled == true &&
+            DisplayBridge.IsFresh(snapshot, DateTimeOffset.UtcNow) && renderer.LineCounts.Count > 0;
+        if (!preview.IsLoaded || !visible) { InvalidateMeasurement(); return; }
+        var bounds = renderer.Bounds(preview);
+        var next = PreviewLayoutMeasurement.Measure(generation, layoutRevision, layoutRevision,
+            preview.IsLoaded, visible, preview.ActualWidth, preview.ActualHeight, preview.DesiredSize.Height,
+            renderer.RequiredHeight, renderer.LineCounts.Count, renderer.LineCounts.SelectMany(row => row).DefaultIfEmpty(0).Max(),
+            renderer.RowGap, bounds.Top, bounds.Bottom, bounds.Compressed);
+        if (next.State == PreviewLayoutState.NotMeasured) { InvalidateMeasurement(); return; }
+        bool changed = !measurementCurrent || measurement is null ||
+            measurement with { MeasuredAt = next.MeasuredAt } != next;
+        measurement = next; measurementCurrent = true;
+        if (changed) PreviewChanged?.Invoke();
+    }
+    private void DisconnectPreview()
+    {
+        if (preview is null) return;
+        preview.Loaded -= PreviewLoaded; preview.Unloaded -= PreviewUnloaded;
+        preview.SizeChanged -= PreviewSizeChanged; preview.LayoutUpdated -= PreviewLayoutUpdated;
+        preview.PointerEntered -= PreviewPointerEntered; preview.PointerExited -= PreviewPointerExited;
+        renderer.Clear();
+        InvalidateMeasurement();
+    }
     private void SetActive(bool active)
     {
         if (disposed) return;
@@ -96,8 +156,11 @@ public sealed class MainPlugin : WidgetPluginBase, IConfigurableWidgetPlugin, IW
             polling = null;
             renderTimer.Stop();
             snapshot = null;
+            InvalidateMeasurement();
+            renderer.Clear();
             preview?.Children.Clear();
             detail?.Children.Clear();
+            detailCountdowns.Clear();
         }
     }
     private async Task PollAsync(CancellationToken token)
@@ -117,6 +180,8 @@ public sealed class MainPlugin : WidgetPluginBase, IConfigurableWidgetPlugin, IW
                         snapshot?.WidgetOptions.ItemsPerPage != next?.WidgetOptions.ItemsPerPage)
                     { page = 0; lastRotation = DateTimeOffset.UtcNow; }
                     snapshot = next;
+                    if (next is not null) settingsVisualOptions = next with { Indicators = next.Indicators.Select(item =>
+                        item with { Reading = PresentationDemo.Reading(item.Id, item.Label) }).ToArray() };
                     availability.Observe(next?.WidgetEnabled);
                     if (next?.WidgetEnabled == true) renderTimer.Start(); else renderTimer.Stop();
                     Render();
@@ -147,7 +212,16 @@ public sealed class MainPlugin : WidgetPluginBase, IConfigurableWidgetPlugin, IW
             changed = true;
             lastRotation = now;
         }
-        if (changed) Render(); else RenderDetail();
+        if (changed) Render();
+        else
+        {
+            if (snapshot is { WidgetEnabled: true } current) renderer.UpdateText(instanceSettings, current, now);
+            foreach (var entry in detailCountdowns)
+            {
+                string text = ResetDetail(entry.Reset, now);
+                if (entry.Text.Text != text) entry.Text.Text = text;
+            }
+        }
     }
     private IReadOnlyList<WidgetCell<DisplayIndicator>> VisibleCells() => snapshot is { WidgetEnabled: true } value &&
         DisplayBridge.IsFresh(value, DateTimeOffset.UtcNow) ?
@@ -162,58 +236,37 @@ public sealed class MainPlugin : WidgetPluginBase, IConfigurableWidgetPlugin, IW
     {
         if (preview is not null)
         {
-            preview.Children.Clear(); preview.RowDefinitions.Clear(); preview.ColumnDefinitions.Clear();
-            if (IsPreviewVisible)
+            var cells = VisibleCells();
+            string shape = System.Text.Json.JsonSerializer.Serialize(new {
+                Options = snapshot?.WidgetOptions, snapshot?.MemoryNominal, snapshot?.StackedQuotas,
+                snapshot?.DetailedCountdown, snapshot?.ShowQuotaReset, instanceSettings.ShowNames,
+                Width = PreviewLogicalWidth, Page = page,
+                Cells = cells.Select(cell => new { cell.Row, cell.Column, cell.Item.Id, cell.Item.ShowTemperature,
+                    Lines = cell.Item.Reading.Windows?.Count(window => window.AccountWindow) ?? 1 }) });
+            if (layoutShape != shape) { layoutRevision++; layoutShape = shape; InvalidateMeasurement(); }
+            measurementCurrent = false;
+            if (IsPreviewVisible && snapshot is { WidgetEnabled: true } value && cells.Count > 0)
+                renderer.Build(preview, cells, instanceSettings, value, DateTimeOffset.UtcNow,
+                    id => { selectedId = id; RenderDetail(); Context?.RequestOpenFlyout(); });
+            else
             {
-                var cells = VisibleCells();
-                if (cells.Count == 0) preview.Children.Add(Text("NexoBar · indisponível"));
-                foreach (var row in cells.GroupBy(x => x.Row))
-                {
-                    var line = new Grid { VerticalAlignment = VerticalAlignment.Center };
-                    foreach (var cell in row)
-                    {
-                        line.ColumnDefinitions.Add(new ColumnDefinition());
-                        var item = cell.Item;
-                        var panel = new Grid { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(3, 0, 3, 0),
-                            Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
-                        panel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                        panel.ColumnDefinitions.Add(new ColumnDefinition());
-                        var value = Text((instanceSettings.ShowNames ? item.Label + " · " : "") + string.Join(" | ", Summary(item)), 12);
-                        panel.Children.Add(IndicatorIcon.Create(item.Id, value));
-                        value.Margin = new Thickness(4, 0, 0, 0); Grid.SetColumn(value, 1); panel.Children.Add(value);
-                        // Capture the immutable ID before the host opens its flyout, never the rotating index.
-                        panel.Tapped += (_, _) => { selectedId = item.Id; RenderDetail(); Context?.RequestOpenFlyout(); };
-                        var tooltipLines = item.Reading.Windows is not null ?
-                            Presentation.QuotaLines(item.Reading, PresentationOptions(), DateTimeOffset.UtcNow) : Summary(item);
-                        string label = item.Label;
-                        if (item.Id.StartsWith("gpu:", StringComparison.Ordinal) && GpuBrand.Wordmark(item.Reading.Vendor) is { } brand)
-                            label += " · " + brand;
-                        string description = label + " · " + string.Join(" | ", tooltipLines);
-                        ToolTipService.SetToolTip(panel, description);
-                        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(panel, description);
-                        Grid.SetColumn(panel, cell.Column); line.Children.Add(panel);
-                    }
-                    preview.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                    Grid.SetRow(line, preview.RowDefinitions.Count - 1); preview.Children.Add(line);
-                }
+                renderer.Clear();
+                preview.Children.Clear(); preview.RowDefinitions.Clear(); preview.ColumnDefinitions.Clear();
+                if (IsPreviewVisible) preview.Children.Add(Text("NexoBar · indisponível"));
+                InvalidateMeasurement();
             }
+            measurementDirty = true;
         }
+        PreviewChanged?.Invoke();
         RenderDetail();
     }
     private Preferences PresentationOptions() => new() { MemoryNominal = snapshot?.MemoryNominal ?? true,
-        StackedQuotas = snapshot?.StackedQuotas ?? false, DetailedCountdown = snapshot?.DetailedCountdown ?? false };
-    private IReadOnlyList<string> Summary(DisplayIndicator item)
-    {
-        if (item.Reading is null || item.Reading.Unavailable is not null) return ["indisponível"];
-        var reading = item.Reading;
-        var prefs = PresentationOptions();
-        if (reading.Windows is not null)
-            return instanceSettings.PreviewQuotaValues(reading, DateTimeOffset.UtcNow, prefs.DetailedCountdown);
-        return [Presentation.Metric(reading, new(item.Id, item.Label, true, item.ShowTemperature), prefs)];
-    }
+        StackedQuotas = snapshot?.StackedQuotas ?? false, DetailedCountdown = snapshot?.DetailedCountdown ?? false,
+        ShowQuotaReset = snapshot?.ShowQuotaReset ?? true };
     private void RenderDetail()
     {
         if (detail is null) return;
+        detailCountdowns.Clear();
         detail.Children.Clear();
         var item = DisplayBridge.IsFresh(snapshot, DateTimeOffset.UtcNow) && snapshot!.WidgetEnabled ?
             snapshot.Indicators.FirstOrDefault(x => x.Id == selectedId) : null;
@@ -230,7 +283,10 @@ public sealed class MainPlugin : WidgetPluginBase, IConfigurableWidgetPlugin, IW
             {
                 detail.Children.Add(Text(window.Label + " · " + Presentation.QuotaValue(window), 16));
                 if (window.ResetsAt is { } reset)
-                    detail.Children.Add(Text("Renovação: " + reset.ToLocalTime().ToString("g") + " · " + Presentation.Countdown(reset, DateTimeOffset.UtcNow, true)));
+                {
+                    var countdown = Text(ResetDetail(reset, DateTimeOffset.UtcNow));
+                    detail.Children.Add(countdown); detailCountdowns.Add((countdown, reset));
+                }
             }
             detail.Children.Add(new TextBlock { Text = "Atividade não informada pela fonte", TextWrapping = TextWrapping.Wrap });
         }
@@ -242,6 +298,8 @@ public sealed class MainPlugin : WidgetPluginBase, IConfigurableWidgetPlugin, IW
         }
         detail.Children.Add(Text("Leitura: " + reading.CapturedAt.ToLocalTime().ToString("T"), 10));
     }
+    private static string ResetDetail(DateTimeOffset reset, DateTimeOffset now) =>
+        "Renovação: " + reset.ToLocalTime().ToString("g") + " · " + Presentation.Countdown(reset, now, true);
     public override async ValueTask DisposeAsync()
     {
         disposed = true;
@@ -250,6 +308,8 @@ public sealed class MainPlugin : WidgetPluginBase, IConfigurableWidgetPlugin, IW
         polling?.Cancel();
         if (pollTask is not null) await pollTask.ConfigureAwait(false);
         polling?.Dispose(); polling = null;
-        snapshot = null; preview = null; detail = null;
+        DisconnectPreview(); PreviewChanged = null;
+        detailCountdowns.Clear();
+        snapshot = null; settingsVisualOptions = null; preview = null; detail = null;
     }
 }

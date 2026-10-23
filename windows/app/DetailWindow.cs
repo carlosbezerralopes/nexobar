@@ -57,13 +57,13 @@ internal sealed class DetailWindow : Window
         panel.Children.Add(Text("Fonte: " + reading.Source));
         panel.Children.Add(Text("Observação: " + reading.CapturedAt.ToLocalTime().ToString("G", CultureInfo.CurrentCulture)));
         if (Preferences.Providers.Contains(reading.Id)) panel.Children.Add(Text(reading.Activity));
-        if (reading.Id == "claude") panel.Children.Add(Text("Reler consulta o arquivo local. O Claude Code precisa entregar uma status line recente."));
+        if (reading.Id == "claude") panel.Children.Add(Text("Consulta temporária /usage no cliente já autenticado."));
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 15, 0, 0) };
         var customize = new Button { Content = "Personalizar barra…", Padding = new Thickness(9, 5, 9, 5) };
         customize.Click += (_, _) => settings(); buttons.Children.Add(customize);
         if (Preferences.Providers.Contains(reading.Id))
         {
-            var reload = new Button { Content = reading.Id == "claude" ? "Reler status line" : "Reler cota", Padding = new Thickness(9, 5, 9, 5), Margin = new Thickness(8, 0, 0, 0) };
+            var reload = new Button { Content = reading.Id == "claude" ? "Atualizar Claude" : "Reler cota", Padding = new Thickness(9, 5, 9, 5), Margin = new Thickness(8, 0, 0, 0) };
             reload.Click += (_, _) => reread(); buttons.Children.Add(reload);
         }
         panel.Children.Add(buttons);
