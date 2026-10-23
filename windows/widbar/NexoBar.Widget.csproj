@@ -8,7 +8,7 @@
     <RestoreLockedMode>true</RestoreLockedMode>
     <WidBarPluginId>com.nexobar.indicators</WidBarPluginId><WidBarPluginName>NexoBar</WidBarPluginName>
     <WidBarPluginDescription>Indicadores locais coletados pelo NexoBar.</WidBarPluginDescription><WidBarPluginCategory>System</WidBarPluginCategory>
-    <Version>0.5.0</Version><WidBarPluginVersion>0.5.0</WidBarPluginVersion><WidBarPluginPreviewWidth>320</WidBarPluginPreviewWidth><WidBarPluginConfigurable>true</WidBarPluginConfigurable>
+    <Version>0.6.1</Version><WidBarPluginVersion>0.6.1</WidBarPluginVersion><WidBarPluginPreviewWidth>320</WidBarPluginPreviewWidth><WidBarPluginConfigurable>true</WidBarPluginConfigurable>
   </PropertyGroup>
   <PropertyGroup Condition="'$(ContractBuild)' == 'true'">
     <UseWinUI>false</UseWinUI><OutputType>Library</OutputType><WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained><SelfContained>false</SelfContained>

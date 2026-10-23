@@ -27,14 +27,13 @@ internal sealed class WidgetInstanceSettings
         { return new(new(), null, false); }
     }
     internal int EffectiveWidth(int? inheritedWidth) => WidthOverride ?? Math.Clamp(inheritedWidth ?? 320, 120, 600);
+    internal IReadOnlyList<string> PreviewQuotaLines(Reading reading, DateTimeOffset now,
+        bool detailedCountdown, bool stackedQuotas, bool showQuotaReset)
+        => Presentation.QuotaDisplayLines(reading, now, stackedQuotas, includeWindowLabels: false,
+            showQuotaReset: showQuotaReset, detailedCountdown: detailedCountdown);
+    // Compatibility for the renderer until it forwards all snapshot presentation flags.
     internal IReadOnlyList<string> PreviewQuotaValues(Reading reading, DateTimeOffset now, bool detailedCountdown)
-    {
-        if (reading.Unavailable is not null) return ["indisponível"];
-        var values = (reading.Windows ?? []).Where(window => window.AccountWindow).Select(window =>
-            Presentation.QuotaValue(window) + (!ShowNames || window.ResetsAt is null ? "" :
-                " · " + Presentation.Countdown(window.ResetsAt, now, detailedCountdown))).ToArray();
-        return values.Length == 0 ? ["—"] : values;
-    }
+        => PreviewQuotaLines(reading, now, detailedCountdown, stackedQuotas: true, showQuotaReset: true);
     internal WidgetInstanceSettings With(int? width, bool names) => new((JsonObject)fields.DeepClone(),
         width is { } number ? Math.Clamp(number, 120, 600) : null, names);
     internal string ToJson()

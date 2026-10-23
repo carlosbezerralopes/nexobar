@@ -1,12 +1,12 @@
-# Instalador Windows — 0.5.0
+# Instalador Windows — 0.6.1
 
 `NexoBar-Setup-x64.exe` é um aplicativo WPF para Windows 11 x64, autocontido e de arquivo único. Não exige PowerShell, .NET SDK, Visual Studio ou SignTool na máquina de destino. Executa como usuário; somente a importação opcional e consentida do certificado público usa um helper elevado do próprio EXE.
 
 O usuário escolhe faixa, bandeja e WidBar independentemente, revisa o destino e confirma a instalação. A inicialização automática é uma escolha separada: sem alteração explícita da opção, nenhum atalho Startup é escrito. Em instalação nova, somente CPU/memória começam habilitadas; todos os indicadores de IA ficam desligados.
 
-O aplicativo fica em `%LOCALAPPDATA%/Programs/NexoBar/versions/0.5.0`. O recibo `install-state.json` e o atalho próprio no menu Iniciar identificam a instalação. Versões anteriores são preservadas; uma versão superior não é substituída. Uma versão igual e íntegra é reutilizada. Um destino desconhecido ou alterado é recusado, sem reparo destrutivo automático. Se NexoBar estiver em execução, use **Sair** no aplicativo e **Verificar novamente** no instalador.
+O aplicativo fica em `%LOCALAPPDATA%/Programs/NexoBar/versions/0.6.1`. O recibo `install-state.json` e o atalho próprio no menu Iniciar identificam a instalação. Versões anteriores são preservadas; uma versão superior não é substituída. Uma versão igual e íntegra é reutilizada. Um destino desconhecido ou alterado é recusado, sem reparo destrutivo automático. Se NexoBar estiver em execução, use **Sair** no aplicativo e **Verificar novamente** no instalador.
 
-As preferências em `%LOCALAPPDATA%/NexoBar/indicators.json` recebem somente os três booleanos de apresentação confirmados. Campos desconhecidos, ordem, nomes, pastas das CLIs, largura e posições são preservados. JSON corrompido ou schema desconhecido permanece intacto e gera pendência; alteração concorrente exige nova revisão. Nenhuma CLI de IA, autenticação ou coletor é instanciado pelo instalador.
+As preferências em `%LOCALAPPDATA%/NexoBar/indicators.json` recebem somente os três booleanos de apresentação confirmados. Campos desconhecidos, ordem, nomes, pastas das CLIs, largura, posições, visibilidade de renovação e espaço entre linhas são preservados. JSON corrompido ou schema desconhecido permanece intacto e gera pendência; alteração concorrente exige nova revisão. Nenhuma CLI de IA, autenticação ou coletor é instanciado pelo instalador.
 
 WidBar é um produto separado, identificado pela [página oficial na Microsoft Store](https://apps.microsoft.com/detail/9PKLDNM83TP9). O instalador apresenta a página/termos antes da confirmação. Reutiliza o host compatível; se necessário, usa `winget` já existente com ID exato, fonte `msstore` e `--no-upgrade`. Sem winget, abre a Store e permite retomar. Resultado de processo não prova instalação: o pacote é consultado novamente. O instalador não inicia login nem aceita termos automaticamente.
 
@@ -22,12 +22,12 @@ APIs documentadas: [WINTRUST_DATA](https://learn.microsoft.com/windows/win32/api
 
 ## Compilar
 
-Desenvolvimento exige Windows x64, PowerShell 7, SDK .NET 10 e acesso ao NuGet. Gere primeiro o portátil 0.5.0 e o companion MSIX 0.5.0.0 assinado. A identidade exigida é `NexoBar.Widget`, publisher `CN=NexoBar`, arquitetura x64.
+Desenvolvimento exige Windows x64, PowerShell 7, SDK .NET 10 e acesso ao NuGet. Gere primeiro o portátil 0.6.1 e o companion MSIX 0.6.1.0 assinado. A identidade exigida é `NexoBar.Widget`, publisher `CN=NexoBar`, arquitetura x64.
 
 ```powershell
 pwsh -NoProfile -File windows/setup/build.ps1 `
   -PortableDirectory C:/build/portable/publish `
-  -SignedCompanion C:/build/NexoBar-WidBar-x64-0.5.0-signed.msix `
+  -SignedCompanion C:/build/NexoBar-WidBar-x64-0.6.1-signed.msix `
   -PublicCertificate C:/build/publisher.cer `
   -ArtifactsDirectory C:/build/setup
 ```
@@ -40,5 +40,7 @@ Um build de desenvolvimento sem `SetupPayloadDirectory` compila e mostra erro cl
 dotnet run --project windows/setup/tests/NexoBar.Setup.Tests.csproj -c Release `
   --artifacts-path C:/build/setup-tests -- C:/build/setup-fixtures
 ```
+
+A versão 0.6.1 atualiza uma instalação 0.6.0 preservando a pasta anterior e recusa downgrade de 0.7. A instalação física da 0.6.1 é uma verificação separada das fixtures.
 
 O harness utiliza diretórios exclusivos e serviços injetáveis. Store, MSIX, certificados e atalhos Windows são simulados; a transação e as gravações em arquivos são reais somente dentro do diretório de fixtures. Cobre hash/ZIP, versões, reuso, rollback, cancelamento, pendências, concorrência de preferências e ausência de escrita no Startup. Build e testes não comprovam instalação física, UAC, Store, aparência WPF ou descoberta no WidBar; essas verificações exigem execução nativa separada e autorização explícita.

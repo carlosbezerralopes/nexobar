@@ -305,8 +305,8 @@ internal sealed class BarWindow : Window, IDisposable
         return new DisplaySnapshot(1, DateTimeOffset.UtcNow, options.WidgetEnabled,
             new DisplayWidgetOptions(options.WidgetItemsPerPage, options.WidgetLayout, options.WidgetRotationSeconds,
                 options.WidgetRotate, options.WidgetWidth, options.WidgetPauseOnHover,
-                WidgetPaging.NormalizePlacements(options.WidgetPlacements)), Array.AsReadOnly(indicators),
-            preferences.MemoryNominal, preferences.StackedQuotas, preferences.DetailedCountdown);
+                WidgetPaging.NormalizePlacements(options.WidgetPlacements), options.WidgetRowGap), Array.AsReadOnly(indicators),
+            preferences.MemoryNominal, preferences.StackedQuotas, preferences.DetailedCountdown, preferences.ShowQuotaReset);
     }
     private void OnClosing(object? sender, CancelEventArgs e)
     {

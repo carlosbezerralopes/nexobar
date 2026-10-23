@@ -8,7 +8,7 @@
     <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>NexoBar</AssemblyName>
-    <Version>0.5.0</Version>
+    <Version>0.6.1</Version>
     <StartupObject>NexoBar.Windows.Program</StartupObject>
     <ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>

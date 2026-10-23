@@ -3,6 +3,7 @@
 param(
     [ValidateSet('x64','arm64')][string]$Architecture = 'x64',
     [string]$ArtifactsDirectory,
+    [string]$PackagesDirectory,
     [string]$Publisher = 'CN=NexoBar',
     [string]$MakeAppxPath,
     [switch]$ContractOnly
@@ -12,7 +13,8 @@ if (!$ArtifactsDirectory) { $ArtifactsDirectory = Join-Path ([IO.Path]::GetTempP
 $ArtifactsDirectory = [IO.Path]::GetFullPath($ArtifactsDirectory)
 New-Item -ItemType Directory -Force $ArtifactsDirectory | Out-Null
 $env:DOTNET_CLI_HOME = Join-Path $ArtifactsDirectory 'dotnet-home'
-$env:NUGET_PACKAGES = Join-Path $ArtifactsDirectory 'nuget'
+if (!$PackagesDirectory) { $PackagesDirectory = Join-Path $ArtifactsDirectory 'nuget' }
+$env:NUGET_PACKAGES = [IO.Path]::GetFullPath($PackagesDirectory)
 $env:DOTNET_GENERATE_ASPNET_CERTIFICATE = 'false'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $env:DOTNET_NOLOGO = '1'

@@ -29,6 +29,7 @@ public sealed class Preferences
     public bool MemoryNominal { get; set; } = true;
     public bool StackedQuotas { get; set; }
     public bool DetailedCountdown { get; set; }
+    public bool ShowQuotaReset { get; set; } = true;
     public bool ResetAlerts { get; set; }
     public List<IndicatorPreference> Indicators { get; set; } = Defaults();
     public static readonly string[] Providers = ["claude", "codex", "kiro", "copilot", "antigravity", "cursor", "grok", "opencode", "glm"];
@@ -98,12 +99,17 @@ public static class Presentation
             hours > 0 ? $"{hours}h" + (detailed ? $"{span.Minutes}m" : "") : minutes > 0 ? $"{minutes}m" : "<1m";
     }
     public static IReadOnlyList<string> QuotaLines(Reading r, Preferences p, DateTimeOffset now)
+        => QuotaDisplayLines(r, now, p.StackedQuotas, includeWindowLabels: true,
+            showQuotaReset: p.ShowQuotaReset, detailedCountdown: p.DetailedCountdown);
+    public static IReadOnlyList<string> QuotaDisplayLines(Reading reading, DateTimeOffset now,
+        bool stacked, bool includeWindowLabels, bool showQuotaReset, bool detailedCountdown)
     {
-        if (r.Unavailable is not null) return ["—"];
-        var windows = r.Windows?.Where(w => w.AccountWindow).ToArray() ?? [];
-        var strings = windows.Select(w => $"{w.Label} {QuotaValue(w)}" + (w.ResetsAt is null ? "" : " · " + Countdown(w.ResetsAt, now, p.DetailedCountdown))).ToArray();
+        if (reading.Unavailable is not null) return ["—"];
+        var strings = (reading.Windows ?? []).Where(window => window.AccountWindow).Select(window =>
+            (includeWindowLabels ? window.Label + " " : "") + QuotaValue(window) +
+            (showQuotaReset && window.ResetsAt is not null ? " · " + Countdown(window.ResetsAt, now, detailedCountdown) : "")).ToArray();
         if (strings.Length == 0) return ["—"];
-        return p.StackedQuotas && strings.Length > 1 ? strings : [string.Join("  |  ", strings)];
+        return stacked && strings.Length > 1 ? strings : [string.Join("  |  ", strings)];
     }
     public static string QuotaValue(QuotaWindow w) => w.UsedPercent is not null ? Percent(w.UsedPercent) :
         w.Remaining is { } remaining ? $"{remaining:0.#} restantes" : w.Used is { } used ? $"{used:0.#} utilizados" : "—";

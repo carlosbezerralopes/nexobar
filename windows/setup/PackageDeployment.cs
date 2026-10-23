@@ -44,7 +44,7 @@ public sealed class PackageDeployment : IWidgetPlatform
     }
     public async Task<ComponentResult> EnsureCompanion(string package, CancellationToken token, IProgress<string>? progress)
     {
-        var target = new Version(0, 5, 0, 0); var installed = Find("NexoBar.Widget", "CN=NexoBar");
+        var target = new Version(0, 6, 1, 0); var installed = Find("NexoBar.Widget", "CN=NexoBar");
         if (installed is not null && VersionOf(installed) >= target)
             return new(true, "Companion compatível já instalado; sem reinstalação/downgrade.");
         progress?.Report("Instalando companion NexoBar…");

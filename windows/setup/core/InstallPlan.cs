@@ -62,11 +62,11 @@ public static class WidgetCoordinator
             if (platform.HostVersion() is not { } verified || verified < new Version(1, 2, 8, 0))
                 return new(false, "WidBar não confirmado após solicitação. Abra a Store e verifique novamente.");
         }
-        if (platform.CompanionVersion() is { } installed && installed >= new Version(0, 5, 0, 0))
+        if (platform.CompanionVersion() is { } installed && installed >= new Version(0, 6, 1, 0))
             return new(true, "Companion compatível já instalado; sem reinstalação/downgrade.");
         var result = await platform.EnsureCompanion(package, token, progress);
         if (!result.Success) return result;
-        return platform.CompanionVersion() is { } version && version >= new Version(0, 5, 0, 0) ?
+        return platform.CompanionVersion() is { } version && version >= new Version(0, 6, 1, 0) ?
             new(true, "Companion confirmado. Abra WidBar e adicione NexoBar pelo catálogo.") : new(false, "Companion não confirmado após solicitação; verifique novamente.");
     }
 }

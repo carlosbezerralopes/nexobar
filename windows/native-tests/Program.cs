@@ -38,6 +38,58 @@ if (args.Length != 1 || !Path.IsPathFullyQualified(args[0])) { Console.Error.Wri
 Directory.CreateDirectory(args[0]);
 int checks = 0;
 void Check(bool condition, string label) { if (!condition) throw new Exception("FAIL " + label); Console.WriteLine("PASS " + label); checks++; }
+void DiscoveryCases()
+{
+    string fixtures = Path.Combine(args[0], "discovery-" + Guid.NewGuid().ToString("N"));
+    string home = Path.Combine(fixtures, "home"), appData = Path.Combine(fixtures, "roaming data"), first = Path.Combine(fixtures, "first prefix"), second = Path.Combine(fixtures, "second prefix");
+    string Touch(string path, string content = "synthetic fixture; never execute") { Directory.CreateDirectory(Path.GetDirectoryName(path)!); File.WriteAllText(path, content); return Path.GetFullPath(path); }
+    string Package(string prefix, string manifest = "{\"name\":\"@anthropic-ai/claude-code\",\"bin\":{\"claude\":\"bin/claude.exe\"}}")
+    {
+        string package = Path.Combine(prefix, "node_modules", "@anthropic-ai", "claude-code");
+        Touch(Path.Combine(package, "package.json"), manifest);
+        return Touch(Path.Combine(package, "bin", "claude.exe"));
+    }
+    string search = first + Path.PathSeparator + second;
+    string? Locate(string? path = null) => OwnedCommand.LocateClaudeNative(home, path ?? search, appData);
+    Check(Locate() is null, "missing Claude is unavailable");
+    string shimMarker = Path.Combine(fixtures, "shim-executed");
+    Touch(Path.Combine(first, "claude.cmd"), "@echo off\r\necho executed>\"" + shimMarker + "\"\r\n");
+    Touch(Path.Combine(first, "claude.ps1"), "throw 'shim must never execute'");
+    Check(Locate() is null, "shim-only installation is unavailable");
+    string npm = Package(second);
+    Check(Locate() == npm, "known npm native package found through PATH with spaces");
+    string firstNpm = Package(first);
+    Check(Locate() == firstNpm, "npm prefixes retain PATH order");
+    string canonical = Package(Path.Combine(appData, "npm"));
+    Check(Locate("") == canonical, "canonical APPDATA npm fallback");
+    Check(Locate("\"" + second + "\"") == npm, "quoted npm PATH prefix");
+    string pathNative = Touch(Path.Combine(second, "claude.exe"));
+    Check(Locate() == pathNative, "PATH native executable precedes npm package");
+    string earlierNative = Touch(Path.Combine(first, "claude.exe"));
+    Check(Locate() == earlierNative, "native PATH order preserved");
+    string cargo = Touch(Path.Combine(home, ".cargo", "bin", "claude.exe"));
+    Check(Locate() == cargo, "cargo native precedence preserved");
+    string local = Touch(Path.Combine(home, ".local", "bin", "claude.exe"));
+    Check(Locate() == local, "local native executable has first precedence");
+    foreach (var invalid in new[] {
+        "{\"name\":\"another-package\",\"bin\":{\"claude\":\"bin/claude.exe\"}}",
+        "{\"name\":\"@anthropic-ai/claude-code\",\"bin\":{\"claude\":\"../claude.exe\"}}",
+        "{\"name\":\"@anthropic-ai/claude-code\",\"bin\":{\"claude\":\"bin/../bin/claude.exe\"}}",
+        "{\"name\":\"@anthropic-ai/claude-code\",\"bin\":{\"claude\":\"C:/outside/claude.exe\"}}",
+        "{\"name\":\"@anthropic-ai/claude-code\",\"bin\":\"bin/claude.exe\"}",
+        "{\"name\":null,\"bin\":{\"claude\":true}}", "[]", "{invalid" })
+    {
+        string isolated = Path.Combine(fixtures, "invalid-" + Guid.NewGuid().ToString("N"));
+        Package(isolated, invalid);
+        Check(OwnedCommand.LocateClaudeNative(Path.Combine(isolated, "home"), isolated, Path.Combine(isolated, "roaming")) is null,
+            "invalid npm identity or entry rejected");
+    }
+    string missing = Path.Combine(fixtures, "missing-native");
+    string absent = Package(missing); File.Delete(absent);
+    Check(OwnedCommand.LocateClaudeNative(Path.Combine(missing, "home"), missing, Path.Combine(missing, "roaming")) is null, "npm manifest without native entry rejected");
+    Check(!File.Exists(shimMarker), "discovery never executes npm shims");
+}
+DiscoveryCases();
 async Task Gone(string folder)
 {
     foreach (string file in new[] { "root.pid", "child.pid" })

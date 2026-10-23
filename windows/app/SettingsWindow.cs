@@ -69,9 +69,10 @@ internal sealed class SettingsWindow : Window
         for (int i = 1; i < monitors.Items.Count; i++) if (((ComboBoxItem)monitors.Items[i]).Tag as string == preferences.MonitorId) monitors.SelectedIndex = i;
         monitors.SelectionChanged += (_, _) => preferences.MonitorId = ((ComboBoxItem)monitors.SelectedItem).Tag as string;
         panel.Children.Add(monitors);
-        panel.Children.Add(Toggle("Memória: em uso / total (GiB)", preferences.MemoryNominal, v => preferences.MemoryNominal = v));
-        panel.Children.Add(Toggle("Cotas em duas linhas (horizontal por padrão)", preferences.StackedQuotas, v => preferences.StackedQuotas = v));
-        panel.Children.Add(Toggle("Detalhar tempo restante (2h13m, 3d4h)", preferences.DetailedCountdown, v => preferences.DetailedCountdown = v));
+        panel.Children.Add(Toggle("Memória: em uso / total (GiB)", preferences.MemoryNominal, v => { preferences.MemoryNominal = v; PreviewWidget(); }));
+        panel.Children.Add(Toggle("Cotas empilhadas dentro de cada indicador (somente janelas reais)", preferences.StackedQuotas, v => { preferences.StackedQuotas = v; PreviewWidget(); }));
+        panel.Children.Add(Toggle("Mostrar tempo até a renovação", preferences.ShowQuotaReset, v => { preferences.ShowQuotaReset = v; PreviewWidget(); }));
+        panel.Children.Add(Toggle("Detalhar tempo restante (2h13m, 3d4h)", preferences.DetailedCountdown, v => { preferences.DetailedCountdown = v; PreviewWidget(); }));
         panel.Children.Add(Toggle("Avisar renovação confirmada pela fonte", preferences.ResetAlerts, v => preferences.ResetAlerts = v));
         panel.Children.Add(Label("Tema acompanha o sistema; GPU usa a identidade física informada pelo monitor de hardware."));
         panel.Children.Add(Label("Pastas das CLIs", 17));
@@ -122,8 +123,8 @@ internal sealed class SettingsWindow : Window
         panel.Children.Add(Label("O widget lê as mesmas medições do aplicativo. Não executa sensores ou consultas de IA."));
         var layout = new ComboBox { HorizontalAlignment = HorizontalAlignment.Left, MinWidth = 220, Margin = new Thickness(0, 4, 0, 6) };
         layout.Items.Add(new ComboBoxItem { Content = "Horizontal", Tag = "horizontal" });
-        layout.Items.Add(new ComboBoxItem { Content = "Duas linhas", Tag = "twoRows" });
-        layout.Items.Add(new ComboBoxItem { Content = "Personalizado — duas linhas", Tag = "customRows" });
+        layout.Items.Add(new ComboBoxItem { Content = "Duas linhas de componentes", Tag = "twoRows" });
+        layout.Items.Add(new ComboBoxItem { Content = "Personalizado — duas linhas de componentes", Tag = "customRows" });
         layout.SelectedIndex = preferences.Displays.WidgetLayout == "customRows" ? 2 : preferences.Displays.WidgetLayout == "twoRows" ? 1 : 0;
         layout.SelectionChanged += (_, _) => {
             string chosen = (string)((ComboBoxItem)layout.SelectedItem).Tag;
@@ -135,10 +136,12 @@ internal sealed class SettingsWindow : Window
         var preset = new Button { Content = "CPU e memória acima; Claude, Codex e Kiro abaixo", HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 4, 8, 4) };
         preset.Click += (_, _) => { preferences.Displays.UseHardwareAgentsPreset(); previewPage = 0; Render(); };
         panel.Children.Add(preset);
-        panel.Children.Add(Label("O preset organiza esses cinco IDs; a seleção dos indicadores e a largura continuam nas opções correspondentes."));
+        panel.Children.Add(Label("2+3 é um preset: organize livremente 1+4, 3+2 ou outra distribuição. O limite é de oito indicadores no total por página, não por linha. Cotas empilhadas são linhas internas de cada indicador."));
         widgetRows = new StackPanel(); panel.Children.Add(widgetRows); RefreshWidgetRows();
-        Number(panel, "Indicadores por página", preferences.Displays.WidgetItemsPerPage, 1, 8, v => { preferences.Displays.WidgetItemsPerPage = v; previewPage = 0; PreviewWidget(); });
+        Number(panel, "Indicadores no total por página", preferences.Displays.WidgetItemsPerPage, 1, 8, v => { preferences.Displays.WidgetItemsPerPage = v; previewPage = 0; PreviewWidget(); });
         Number(panel, "Largura do widget (px)", preferences.Displays.WidgetWidth, 120, 600, v => { preferences.Displays.WidgetWidth = v; PreviewWidget(); });
+        Number(panel, "Espaço entre linhas de componentes (px)", preferences.Displays.WidgetRowGap, 0, 12, v => { preferences.Displays.WidgetRowGap = v; PreviewWidget(); });
+        panel.Children.Add(Label("A altura e a largura disponíveis dependem do host/taskbar. O espaço só se aplica entre linhas não vazias."));
         panel.Children.Add(Toggle("Alternar páginas automaticamente", preferences.Displays.WidgetRotate, v => preferences.Displays.WidgetRotate = v));
         Number(panel, "Intervalo de rotação (segundos)", preferences.Displays.WidgetRotationSeconds, 2, 60, v => preferences.Displays.WidgetRotationSeconds = v);
         panel.Children.Add(Toggle("Pausar rotação com o ponteiro sobre o widget", preferences.Displays.WidgetPauseOnHover, v => preferences.Displays.WidgetPauseOnHover = v));
@@ -168,11 +171,16 @@ internal sealed class SettingsWindow : Window
             {
                 line.ColumnDefinitions.Add(new ColumnDefinition());
                 var item = cell.Item;
-                string value = item.Id == "memory" ? "12/32 GiB" : item.Id == "cpu" ? "24%" : "38%";
-                var label = new TextBlock { Text = item.Label + " · " + value, ToolTip = item.Id + " · demonstrativo",
-                    TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(5, 2, 5, 2), Foreground = Foreground, FontSize = 12 };
-                Grid.SetColumn(label, cell.Column); line.Children.Add(label);
+                var values = new StackPanel { Orientation = Orientation.Vertical, VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(5, 0, 5, 0), ToolTip = item.Id + " · demonstrativo" };
+                var lines = PresentationDemo.Lines(item, preferences);
+                for (int i = 0; i < lines.Count; i++) values.Children.Add(new TextBlock {
+                    Text = (i == 0 ? item.Label + " · " : "") + lines[i],
+                    TextTrimming = TextTrimming.CharacterEllipsis, Foreground = Foreground, FontSize = 11,
+                    LineHeight = 12, LineStackingStrategy = LineStackingStrategy.BlockLineHeight });
+                Grid.SetColumn(values, cell.Column); line.Children.Add(values);
             }
+            if (grid.RowDefinitions.Count > 0) grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(options.WidgetRowGap) });
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             Grid.SetRow(line, grid.RowDefinitions.Count - 1); grid.Children.Add(line);
         }
@@ -194,8 +202,8 @@ internal sealed class SettingsWindow : Window
         preferences.Displays.EnsurePlacements(ids);
         for (int row = 0; row < 2; row++)
         {
-            panel.Children.Add(Label($"Linha {row + 1}", 14));
             var items = preferences.Displays.WidgetPlacements.Where(x => x.Row == row && ids.Contains(x.Id)).ToArray();
+            panel.Children.Add(Label($"Linha {row + 1} · {items.Length} indicadores", 14));
             if (items.Length == 0) panel.Children.Add(Label("Vazia · não ocupa altura no widget"));
             for (int i = 0; i < items.Length; i++)
             {
@@ -206,7 +214,7 @@ internal sealed class SettingsWindow : Window
                 foreach (int direction in new[] { -1, 1 })
                 {
                     int move = direction;
-                    var button = new Button { Content = move < 0 ? "←" : "→", IsEnabled = move < 0 ? i > 0 : i < items.Length - 1,
+                    var button = new Button { Content = move < 0 ? "← Ordem" : "Ordem →", IsEnabled = move < 0 ? i > 0 : i < items.Length - 1,
                         Margin = new Thickness(3), Padding = new Thickness(8, 2, 8, 2) };
                     button.Click += (_, _) => { preferences.Displays.MoveWidget(item.Id, move, ids); previewPage = 0; Render(); };
                     line.Children.Add(button);
