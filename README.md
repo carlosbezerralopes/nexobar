@@ -27,10 +27,10 @@ Uma leitura ausente aparece como indisponível. O NexoBar não transforma ausên
 |---|---|---|
 | macOS 14+ · Apple Silicon | Barra de menus nativa em AppKit/SwiftUI | 0.3.1; bundle arm64, testes automatizados e verificações físicas em Apple M5 Pro. Outros chips precisam de validação. |
 | macOS · Intel | Mesma base Swift | Exige compilação própria; execução física ainda não verificada. |
-| Windows 11 · x64 | Faixa translúcida, ícones de bandeja e companion WidBar | 0.4.0; compilação cruzada e testes de núcleo/ponte realizados no macOS. GUI, sensores, ConPTY e integração física ainda precisam de teste Windows. |
+| Windows 11 · x64 | Faixa translúcida, ícones de bandeja e companion WidBar | 0.4.0; builds WPF/WinUI/MSIX e testes de núcleo, ponte e ConPTY sintético executados no Windows. CPU/RAM reais lidas; GUI e integrações autenticadas ainda pendentes. |
 | Linux | — | Não implementado. |
 
-A compilação C# do companion contra o SDK real foi verificada. Seu XAML, empacotamento MSIX, assinatura, instalação e execução no host WidBar permanecem pendentes de validação no Windows. Veja a [matriz de evidências Windows](windows/docs/VALIDATION.md).
+O companion compilou com XAML e foi empacotado, assinado com certificado de teste e instalado localmente no Windows; o host WidBar também foi instalado. Descoberta do plugin e execução visual no host permanecem pendentes. Isso não indica disponibilidade de um pacote publicado. Veja a [matriz de evidências Windows](windows/docs/VALIDATION.md).
 
 ### Três modos independentes no Windows
 
@@ -61,7 +61,7 @@ Os indicadores de IA são opcionais. Configure os clientes necessários fora do 
 
 | Provedor | Fonte disponível no código | Disponibilidade |
 |---|---|---|
-| Claude | Consulta temporária `/usage` do Claude Code, em PTY no Mac e ConPTY no Windows. | Mac verificado; transporte Windows ainda precisa de execução nativa. |
+| Claude | Consulta temporária `/usage` do Claude Code, em PTY no Mac e ConPTY no Windows. | Mac verificado; ConPTY sintético passou no Windows, consulta autenticada pendente. |
 | Codex | RPC de limites pelo `codex app-server`. | Depende da CLI compatível e da sessão existente. |
 | Kiro | Comando `/usage` pela CLI não interativa. | Depende de versão/formato compatíveis. |
 | GitHub Copilot | Consulta pela sessão existente de `gh api`. | Depende do acesso fornecido pelo cliente. |

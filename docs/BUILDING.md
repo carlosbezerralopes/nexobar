@@ -37,7 +37,9 @@ pwsh -NoProfile -File windows/scripts/build.ps1
 
 O build executa os testes do núcleo e de pipe, compila WPF e publica `win-x64 --self-contained` em `dist/NexoBar-Windows-x64-preview.zip`. O harness sintético ConPTY só é executado em Windows. Compilação cruzada não valida interface, sensores, CLIs autenticadas ou ciclo de processos no Windows.
 
-O ZIP inclui app portátil para faixa/bandeja e kit-fonte WidBar. O MSIX do companion exige ferramentas Windows, assinatura e implantação próprias. Veja [compilar WidBar](../windows/widbar/README.md#compilar).
+O ZIP inclui app portátil para faixa/bandeja e kit-fonte WidBar. O construtor do companion restaura e localiza as ferramentas Windows do NuGet para gerar o MSIX; assinatura e implantação são etapas separadas. Visual Studio e Windows SDK completos não foram necessários no build nativo verificado. Veja [compilar WidBar](../windows/widbar/README.md#compilar).
+
+Em Windows 11 x64, .NET SDK 10.0.402, passaram 148 checks de núcleo, 20 de ponte e 63 de ConPTY com processos sintéticos. WPF, WinUI/XAML e MSIX compilaram nativamente; o diagnóstico leu CPU/RAM reais. A validação visual e as consultas de clientes autenticados permanecem pendentes na [matriz Windows](../windows/docs/VALIDATION.md).
 
 Após extrair no Windows, `pwsh -NoProfile -File smoke-windows.ps1 -OpenUI` diagnostica sensores e abre a GUI com preferências isoladas. `-TestConPty` executa clientes sintéticos; a consulta real `-QueryClaude` é opt-in e exige `-ClaudeFolder` já confiável. Leia os [parâmetros e verificações completas](../windows/README.md#compilar-e-verificar) antes da execução. O smoke padrão não consulta Claude.
 

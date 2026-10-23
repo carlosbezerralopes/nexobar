@@ -28,18 +28,31 @@ if ($ContractOnly) {
     exit 0
 }
 if (!$IsWindows) { throw 'WinUI/XAML e MakeAppx exigem Windows nativo. Use -ContractOnly para conferir C# no macOS/Linux.' }
+& dotnet restore $project "-p:RuntimeIdentifier=win-$Architecture" --artifacts-path (Join-Path $ArtifactsDirectory 'build')
+if ($LASTEXITCODE -ne 0) { throw 'Restore do companion falhou.' }
 if (!$MakeAppxPath) {
-    $kits = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits/10/bin'
-    if (!(Test-Path $kits)) { throw 'Windows SDK ausente: MakeAppx.exe é obrigatório para empacotar.' }
-    $MakeAppxPath = Get-ChildItem $kits -Filter makeappx.exe -Recurse | Where-Object { $_.Directory.Name -eq 'x64' } | Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
+    $lock = Get-Content (Join-Path $PSScriptRoot 'packages.lock.json') -Raw | ConvertFrom-Json
+    $sdkToolsVersion = ($lock.dependencies.PSObject.Properties | Select-Object -First 1).Value.'Microsoft.Windows.SDK.BuildTools'.resolved
+    $sdkTools = Join-Path $env:NUGET_PACKAGES "microsoft.windows.sdk.buildtools/$sdkToolsVersion/bin"
+    if (Test-Path $sdkTools) {
+        $MakeAppxPath = Get-ChildItem $sdkTools -Filter makeappx.exe -Recurse | Where-Object { $_.Directory.Name -eq 'x64' } | Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
+    }
+    if (!$MakeAppxPath) {
+        $kits = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits/10/bin'
+        if (Test-Path $kits) {
+            $MakeAppxPath = Get-ChildItem $kits -Filter makeappx.exe -Recurse | Where-Object { $_.Directory.Name -eq 'x64' } | Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
+        }
+    }
 }
-if (!$MakeAppxPath -or !(Test-Path $MakeAppxPath)) { throw 'MakeAppx.exe ausente: instale o Windows SDK pelo workload de desenvolvimento Windows do Visual Studio.' }
-$stage = Join-Path $ArtifactsDirectory "stage-$Architecture"
-if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
+if (!$MakeAppxPath -or !(Test-Path $MakeAppxPath)) { throw 'MakeAppx.exe ausente no pacote SDK restaurado e no Windows SDK. Informe -MakeAppxPath.' }
+$stage = [IO.Path]::GetFullPath((Join-Path $ArtifactsDirectory "stage-$Architecture"))
+if (![IO.Path]::GetRelativePath($ArtifactsDirectory, $stage).Equals("stage-$Architecture", [StringComparison]::OrdinalIgnoreCase)) { throw 'Stage fora do diretório de artefatos.' }
+if (Test-Path $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
 $payload = $stage
 New-Item -ItemType Directory -Force $payload,(Join-Path $stage 'Public'),(Join-Path $stage 'Assets') | Out-Null
 & dotnet publish $project -c Release "-p:RuntimeIdentifier=win-$Architecture" --self-contained true -p:WindowsAppSDKSelfContained=true --artifacts-path (Join-Path $ArtifactsDirectory 'build') -o $payload
 if ($LASTEXITCODE -ne 0) { throw 'Compilação WinUI falhou.' }
+Get-ChildItem $payload -Recurse -Filter '*.pdb' -File | Remove-Item -Force
 $licenses = Join-Path $payload 'licenses'
 New-Item -ItemType Directory -Force $licenses | Out-Null
 Copy-Item (Join-Path $PSScriptRoot 'LICENSE-WidBar-SDK.txt') $licenses

@@ -16,13 +16,13 @@ Servidor e cliente não gravam quotas em disco. O servidor recebe uma função q
 
 ## Compilar
 
-Pré-requisitos Windows: Windows 11, PowerShell 7, .NET SDK 10, Windows SDK (MakeAppx) e ferramentas WinUI/Windows App SDK do workload de desenvolvimento Windows do Visual Studio. Acesso ao NuGet oficial durante restore. Na raiz do NexoBar:
+Pré-requisitos Windows: Windows 11, PowerShell 7, .NET SDK 10 e acesso ao NuGet oficial durante restore. O build nativo foi verificado com as ferramentas MakeAppx/MakePri/SignTool do pacote `Microsoft.Windows.SDK.BuildTools` 10.0.26100.4654, sem Visual Studio ou Windows SDK completos instalados. Na raiz do NexoBar:
 
 ```powershell
 pwsh -NoProfile -File windows/widbar/build.ps1
 ```
 
-O script executa as fixtures de pipe, compila/publica WinUI e .NET/WindowsAppSDK autocontidos e gera `TEMP/NexoBar/widbar-build/NexoBar-WidBar-x64-unsigned.msix`. `-Architecture arm64`, `-ArtifactsDirectory`, `-Publisher` e `-MakeAppxPath` são configuráveis. A busca padrão encontra MakeAppx x64; em host ARM64, informe uma ferramenta compatível por `-MakeAppxPath` (execução/emulação não validada). O manifesto tem identidade local `NexoBar.Widget`, Publisher `CN=NexoBar`, Application oculta e AppExtension `com.widbar.widget`, plugin `com.nexobar.indicators`/SDK 2; `Public/plugin.json` vem dos targets do SDK, sem catálogo escrito à mão.
+O script executa as fixtures de pipe, restaura as dependências, compila/publica WinUI e .NET/WindowsAppSDK autocontidos e gera `TEMP/NexoBar/widbar-build/NexoBar-WidBar-x64-unsigned.msix`. Localiza MakeAppx x64 primeiro no pacote SDK restaurado, depois no Windows SDK instalado. `-Architecture arm64`, `-ArtifactsDirectory`, `-Publisher` e `-MakeAppxPath` são configuráveis; em host ARM64, informe uma ferramenta compatível por `-MakeAppxPath` (execução/emulação não validada). O manifesto tem identidade local `NexoBar.Widget`, Publisher `CN=NexoBar`, Application oculta e AppExtension `com.widbar.widget`, plugin `com.nexobar.indicators`/SDK 2; `Public/plugin.json` vem de `obj/widbar/plugin.json`, gerado pelos targets do SDK, sem catálogo escrito à mão. Release não emite símbolos próprios e o estágio do pacote remove PDBs.
 
 O script não instala WidBar, não habilita Developer Mode, não cria/trusta certificado, não assina nem instala o MSIX. Assinatura/deploy exigem identidade e certificado próprios, aprovados fora deste build. WidBar precisa ser instalado separadamente pelo usuário para execução física.
 
@@ -32,7 +32,7 @@ Para conferir C# contra os assemblies reais do SDK no macOS/Linux:
 pwsh -NoProfile -File windows/widbar/build.ps1 -ContractOnly
 ```
 
-Esse modo produz uma biblioteca de verificação; exclui apenas bootstrap e compilação XAML/PRI. Não é um plugin executável empacotado. O build WinUI/MSIX exige as ferramentas Windows nativas, incluindo MakePri/MakeAppx. A compilação C# foi validada no macOS com .NET 10.0.402; a GUI, carregamento no WidBar, ACL entre usuários, assinatura e empacotamento nativo continuam pendentes de Windows. As fixtures de pipe não chamam CLIs autenticadas nem sensores.
+Esse modo produz uma biblioteca de verificação; exclui apenas bootstrap e compilação XAML/PRI. Não é um plugin executável empacotado. A compilação C# foi validada no macOS; WinUI/XAML e MakeAppx passaram nativamente em Windows 11 x64 com .NET 10.0.402. Um MSIX 0.4.0.0 foi assinado com certificado local de teste `CN=NexoBar`, com validade de 30 dias e chave privada não exportável, verificado após confiança autorizada e instalado. O host oficial WidBar 1.2.8.0 também foi instalado. Isso não comprova descoberta/execução visual do plugin nem distribuição pública. GUI, layouts, rotação, cliques, DPI e ACL entre usuários continuam pendentes. As fixtures de pipe não chamam CLIs autenticadas nem sensores. Veja a [matriz de evidências](../docs/VALIDATION.md).
 
 ## Fontes e licença
 

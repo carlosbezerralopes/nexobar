@@ -243,9 +243,22 @@ internal sealed class BarWindow : Window, IDisposable
     internal void OpenSettings()
     {
         if (settings is { IsVisible: true }) { settings.Activate(); return; }
+        string? claudeFolder = preferences.ClaudeWorkingDirectory;
+        string? codexFolder = preferences.CodexWorkingDirectory;
         settings = new SettingsWindow(preferences, () =>
         {
-            Save(); readings.Remove("claude"); readings.Remove("codex"); Reread();
+            Save();
+            if (claudeFolder != preferences.ClaudeWorkingDirectory)
+            {
+                readings.Remove("claude"); nextPoll.Remove("claude");
+                claudeFolder = preferences.ClaudeWorkingDirectory;
+            }
+            if (codexFolder != preferences.CodexWorkingDirectory)
+            {
+                readings.Remove("codex"); nextPoll.Remove("codex");
+                codexFolder = preferences.CodexWorkingDirectory;
+            }
+            Tick();
             return saveError;
         }, () => displayBridge.HasClient);
         settings.Show();

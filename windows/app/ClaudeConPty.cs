@@ -52,18 +52,20 @@ internal sealed class ClaudeConPty : IDisposable
         {
             int hr = Native.CreatePseudoConsole(new Native.Coord(160, 80), input.Read, output.Write, 0, out console);
             if (hr != 0) throw new IOException("ConPTY indisponível neste Windows", Marshal.GetExceptionForHR(hr));
-            // ConPTY owns these references now. No inheritable handles enter CreateProcess.
-            input.Read.Dispose(); output.Write.Dispose();
             IntPtr size = IntPtr.Zero;
             Native.InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref size);
             attributes = Marshal.AllocHGlobal(size);
             if (!Native.InitializeProcThreadAttributeList(attributes, 1, 0, ref size)) throw new Win32Exception();
             attributesInitialized = true;
             if (!Native.UpdateProcThreadAttribute(attributes, 0, (IntPtr)0x00020016, console, (IntPtr)IntPtr.Size, IntPtr.Zero, IntPtr.Zero)) throw new Win32Exception();
-            var startup = new Native.StartupInfoEx { Startup = new Native.StartupInfo { Cb = Marshal.SizeOf<Native.StartupInfoEx>() }, Attributes = attributes };
+            // STARTF_USESTDHANDLES with null handles suppresses redirected parent streams in the ConPTY client.
+            // https://github.com/microsoft/terminal/discussions/15814
+            var startup = new Native.StartupInfoEx { Startup = new Native.StartupInfo { Cb = Marshal.SizeOf<Native.StartupInfoEx>(), Flags = 0x100 }, Attributes = attributes };
             environment = EnvironmentBlock();
             if (!Native.CreateProcess(binary, new StringBuilder(string.Join(' ', new[] { binary }.Concat(arguments).Select(Quote))), IntPtr.Zero, IntPtr.Zero, false,
                 0x00080000 | 0x00000004 | 0x00000400, environment, folder, ref startup, out var created)) throw new Win32Exception();
+            // ConPTY's communication endpoints must stay open through CreateProcess.
+            input.Read.Dispose(); output.Write.Dispose();
             process = new SafeFileHandle(created.Process, true); thread = new SafeFileHandle(created.Thread, true);
             if (!Native.AssignProcessToJobObject(job, process)) { Native.TerminateProcess(process, 1); throw new Win32Exception(); }
             using var canceled = deadline.Token.Register(() => { lock (gate) { if (!job.IsClosed) Native.TerminateJobObject(job, 1); } });
