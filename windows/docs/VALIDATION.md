@@ -1,5 +1,7 @@
 # Evidências e limites — Windows 0.5.0
 
+Validação posterior ao build: a [instalação nativa do pacote final](INSTALLATION-VALIDATION.md) foi concluída, com preferências preservadas, arquivos conferidos e aplicativo instalado conectado ao WidBar. Os estados de instalação pendente abaixo registram a etapa de build anterior a essa execução.
+
 Em 23/10/2026, no Windows 11 x64 (build 26300), passaram 226 checks de núcleo, 60 de ponte/configuração/vetores e 63 de ConPTY sintético. Os testes incluem as oito combinações de modos em fixtures, normalização/migração, paginação, posições personalizadas e comunicação real por pipe entre processos do mesmo usuário. As combinações não foram exercitadas visualmente. As fixtures não executam CLIs autenticadas; em diagnóstico nativo separado, Codex e Kiro retornaram uma janela cada. Claude nativo interrompeu em setup/trust, sem login nem concessão de confiança; Copilot estava ausente.
 
 Build nativo: .NET SDK 10.0.402, WPF e WinUI/XAML, WidBar.SDK 2.1.0 e WindowsAppSDK 2.3.1. MakePri/MakeAppx vieram do NuGet `Microsoft.Windows.SDK.BuildTools` 10.0.26100.4654, sem Visual Studio/Windows SDK completos. O WPF 0.5 foi publicado localmente e empacotado em ZIP; o MSIX 0.5 foi compilado, assinado com certificado de teste, verificado e instalado. `Add-AppxPackage` terminou com exit 0 e `Get-AppxPackage` confirmou versão 0.5.0.0, status 0.
