@@ -1,0 +1,1 @@
+<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><RestoreLockedMode>true</RestoreLockedMode><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework></PropertyGroup><ItemGroup><Compile Include="../WidgetAvailabilityPolicy.cs" Link="WidgetAvailabilityPolicy.cs" /><ProjectReference Include="../../core/NexoBar.Core.csproj" /></ItemGroup></Project>

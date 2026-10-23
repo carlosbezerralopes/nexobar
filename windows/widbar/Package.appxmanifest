@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10" xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10" xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3" xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities" IgnorableNamespaces="uap uap3 rescap">
+  <Identity Name="NexoBar.Widget" Publisher="CN=NexoBar" Version="0.4.0.0" ProcessorArchitecture="x64" />
+  <Properties><DisplayName>NexoBar WidBar</DisplayName><PublisherDisplayName>NexoBar</PublisherDisplayName><Logo>Assets\StoreLogo.png</Logo></Properties>
+  <Dependencies><TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.22000.0" MaxVersionTested="10.0.26100.0" /></Dependencies>
+  <Resources><Resource Language="pt-BR" /></Resources>
+  <Applications>
+    <Application Id="Widget" Executable="NexoBar.Widget.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements DisplayName="NexoBar WidBar" Description="Indicadores do aplicativo NexoBar" BackgroundColor="transparent" Square150x150Logo="Assets\Square150x150Logo.png" Square44x44Logo="Assets\Square44x44Logo.png" AppListEntry="none" />
+      <Extensions><uap3:Extension Category="windows.appExtension"><uap3:AppExtension Name="com.widbar.widget" Id="nexobar" PublicFolder="Public" DisplayName="NexoBar" Description="Indicadores locais coletados pelo NexoBar"><uap3:Properties><WidBarPluginId>com.nexobar.indicators</WidBarPluginId><WidBarSdkVersion>2</WidBarSdkVersion></uap3:Properties></uap3:AppExtension></uap3:Extension></Extensions>
+    </Application>
+  </Applications>
+  <Capabilities><rescap:Capability Name="runFullTrust" /></Capabilities>
+</Package>

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NexoBar Windows — marcas GPU</title>
+<style>
+*{box-sizing:border-box}body{margin:0;padding:40px;background:#e9ebee;color:#191919;font-family:"Segoe UI",system-ui,sans-serif}main{max-width:1180px;margin:auto}h1{font-size:26px;margin:0 0 10px}p{max-width:900px;line-height:1.55;font-size:14px}.scene{margin:26px 0;border:1px solid #aaa;border-radius:10px;overflow:hidden}.desktop{padding:25px 22px;height:160px;display:flex;align-items:center;background:#dedfe2;color:#444;font-size:13px}.strip{display:flex;gap:2px;padding:3px;background:#f7f7f7;color:#191919;border-top:1px solid #999;align-items:center;min-height:38px;flex-wrap:wrap;justify-content:flex-end}.cell{display:flex;align-items:center;padding:5px 9px;gap:8px;border-radius:3px}.cell:hover{background:#dadada}.brand{font-size:11px;font-weight:700;white-space:nowrap}.intel{font-style:italic}.name{font-size:12px;font-weight:600}.value{font-size:11px;white-space:nowrap}.taskbar{height:40px;background:#eee;border-top:1px solid #bbb;display:flex;align-items:center;justify-content:center;font-size:12px}.dark .desktop{background:#17181c;color:#bbb}.dark .strip{background:#1e1e1e;color:#f4f4f4;border-color:#666}.dark .cell:hover{background:#414141}.dark .taskbar{background:#202020;color:#ddd;border-color:#555}svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.4}.caption{font-size:12px;color:#555}.detail{display:flex;align-items:center;gap:12px;font-size:22px;font-weight:600;padding:20px;background:#f7f7f7}.detail .brand{font-size:16px}.dark .detail{background:#1e1e1e;color:#f4f4f4}
+</style>
+<main><h1>Marcas do fabricante por GPU</h1>
+<p><strong>Prévia ilustrativa em HTML, não captura da GUI Windows.</strong> A implementação WPF usa os mesmos wordmarks em Segoe UI e cores monocromáticas. Cada placa mantém nome, métrica e identidade separados; o tipo de hardware determina a marca.</p>
+<section class="scene"><div class="desktop">Tema claro · duas placas NVIDIA + Intel + AMD + fabricante desconhecido</div><div class="strip">
+<div class="cell"><span class="brand">NVIDIA</span><span class="name">GeForce RTX 4080</span><span class="value">83% · 72°C</span></div>
+<div class="cell"><span class="brand">NVIDIA</span><span class="name">GeForce RTX 4070</span><span class="value">15% · 50°C</span></div>
+<div class="cell"><span class="brand intel">intel</span><span class="name">Intel UHD</span><span class="value">5% · 45°C</span></div>
+<div class="cell"><span class="brand">AMD</span><span class="name">Radeon RX 7900</span><span class="value">31% · 56°C</span></div>
+<div class="cell"><svg viewBox="0 0 24 24" aria-label="GPU genérica"><path d="M2 5H19V18H2Z M19 9H22 M19 14H22 M6 9H12V14H6Z M15 9V14 M5 18V21 M10 18V21 M15 18V21"/></svg><span class="name">GPU desconhecida</span><span class="value">—</span></div>
+</div><div class="taskbar">Taskbar Windows existente</div></section>
+<section class="scene dark"><div class="desktop">Tema escuro · cores acompanham o sistema; nomes continuam editáveis</div><div class="strip">
+<div class="cell"><span class="brand">NVIDIA</span><span class="name">GeForce RTX 4080</span><span class="value">83% · 72°C</span></div>
+<div class="cell"><span class="brand">NVIDIA</span><span class="name">GPU de render</span><span class="value">15% · 50°C</span></div>
+<div class="cell"><span class="brand intel">intel</span><span class="name">Intel UHD</span><span class="value">5% · 45°C</span></div>
+<div class="cell"><span class="brand">AMD</span><span class="name">Radeon RX 7900</span><span class="value">31% · 56°C</span></div>
+<div class="cell"><svg viewBox="0 0 24 24" aria-label="GPU genérica"><path d="M2 5H19V18H2Z M19 9H22 M19 14H22 M6 9H12V14H6Z M15 9V14 M5 18V21 M10 18V21 M15 18V21"/></svg><span class="name">GPU desconhecida</span><span class="value">—</span></div>
+</div><div class="taskbar">Taskbar Windows existente</div><div class="detail"><span class="brand">NVIDIA</span>GeForce RTX 4080</div></section>
+<p class="caption">Os números são exemplos. Não houve leitura de sensores ou execução da GUI no Windows. Wordmarks textuais como na referência Codenotch, sem incorporar arquivos de logotipo. Layout final, métricas e DPI exigem teste físico.</p></main></html>
