@@ -7,11 +7,12 @@ using System.Text.Json;
 namespace NexoBar.Core;
 
 public sealed record DisplayWidgetOptions(int ItemsPerPage = 2, string Layout = "horizontal",
-    int RotationSeconds = 5, bool Rotate = true, int Width = 320, bool PauseOnHover = true)
+    int RotationSeconds = 5, bool Rotate = true, int Width = 320, bool PauseOnHover = true,
+    IReadOnlyList<WidgetPlacement>? Placements = null)
 {
-    public DisplayWidgetOptions Normalize() => this with { ItemsPerPage = Math.Clamp(ItemsPerPage, 1, 4),
-        Layout = Layout == "twoRows" ? "twoRows" : "horizontal", RotationSeconds = Math.Clamp(RotationSeconds, 2, 60),
-        Width = Math.Clamp(Width, 120, 600) };
+    public DisplayWidgetOptions Normalize() => this with { ItemsPerPage = Math.Clamp(ItemsPerPage, 1, 8),
+        Layout = WidgetPaging.NormalizeLayout(Layout), RotationSeconds = Math.Clamp(RotationSeconds, 2, 60),
+        Width = Math.Clamp(Width, 120, 600), Placements = WidgetPaging.NormalizePlacements(Placements) };
 }
 public sealed record DisplayIndicator(string Id, string Label, Reading Reading, bool ShowTemperature);
 public sealed record DisplaySnapshot(int SchemaVersion, DateTimeOffset CapturedAt, bool WidgetEnabled,
@@ -30,6 +31,8 @@ public static class DisplayBridge
     }
     public static bool IsFresh(DisplaySnapshot? snapshot, DateTimeOffset now) => snapshot is not null &&
         snapshot.SchemaVersion == 1 && snapshot.WidgetOptions is not null && snapshot.Indicators is not null &&
+        (snapshot.WidgetOptions.Placements is null || snapshot.WidgetOptions.Placements.Count <= 128 &&
+            snapshot.WidgetOptions.Placements.All(x => x is not null && WidgetPaging.ValidId(x.Id))) &&
         snapshot.Indicators.Count <= 128 && snapshot.Indicators.All(x => x is not null && x.Reading is not null &&
             !string.IsNullOrWhiteSpace(x.Id) && x.Id.Length <= 256 && x.Label is { Length: <= 64 } &&
             x.Reading.Id == x.Id && (x.Reading.Windows is null || x.Reading.Windows.Count <= 64 &&
@@ -53,7 +56,7 @@ public static class DisplayBridge
             await pipe.ReadExactlyAsync(data, timeout.Token).ConfigureAwait(false);
             var result = JsonSerializer.Deserialize<DisplaySnapshot>(data);
             if (!IsFresh(result, DateTimeOffset.UtcNow)) return null;
-            return result! with { WidgetOptions = result!.WidgetOptions.Normalize() };
+            return result! with { WidgetOptions = result!.WidgetOptions.Normalize(), Indicators = Array.AsReadOnly(result.Indicators.ToArray()) };
         }
         catch (Exception e) when (e is IOException or OperationCanceledException or JsonException or UnauthorizedAccessException or System.Net.Sockets.SocketException)
         { return null; }

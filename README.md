@@ -6,7 +6,7 @@
 
 Indicadores de hardware e limites de uso em uma barra compacta, com interface em português e consultas pelas sessões dos clientes que você já utiliza.
 
-[macOS 0.3.1 · preview](#plataformas) · [Windows 0.4.0 · preview](#plataformas) · [Compilar](docs/BUILDING.md) · [Licença MIT](LICENSE)
+[macOS 0.3.1 · preview](#plataformas) · [Windows 0.5.0 · preview](#plataformas) · [Compilar](docs/BUILDING.md) · [Licença MIT](LICENSE)
 
 </div>
 
@@ -27,10 +27,10 @@ Uma leitura ausente aparece como indisponível. O NexoBar não transforma ausên
 |---|---|---|
 | macOS 14+ · Apple Silicon | Barra de menus nativa em AppKit/SwiftUI | 0.3.1; bundle arm64, testes automatizados e verificações físicas em Apple M5 Pro. Outros chips precisam de validação. |
 | macOS · Intel | Mesma base Swift | Exige compilação própria; execução física ainda não verificada. |
-| Windows 11 · x64 | Faixa translúcida, ícones de bandeja e companion WidBar | 0.4.0; builds WPF/WinUI/MSIX e testes de núcleo, ponte e ConPTY sintético executados no Windows. CPU/RAM reais lidas; GUI e integrações autenticadas ainda pendentes. |
+| Windows 11 · x64 | Faixa translúcida, ícones de bandeja e companion WidBar | 0.5.0; builds nativos e 226 checks de núcleo, 60 de ponte/configuração/vetores, 63 de ConPTY sintético e 81 de instalador aprovados. Preset 2+3 aplicado; host e configuração do companion verificados. Taskbar e instalação pelo Setup ainda pendentes. |
 | Linux | — | Não implementado. |
 
-O companion compilou com XAML e foi empacotado, assinado com certificado de teste e instalado localmente no Windows; o host WidBar também foi instalado. Descoberta do plugin e execução visual no host permanecem pendentes. Isso não indica disponibilidade de um pacote publicado. Veja a [matriz de evidências Windows](windows/docs/VALIDATION.md).
+O companion 0.5 foi compilado, assinado com certificado de teste, verificado e instalado. O host WidBar 1.2.8 reabriu “Em execução”; a configuração do companion mostrou os cinco ícones em 2+3 e permitiu exercitar largura própria, Cancelar e Salvar com largura herdada. O preset foi aplicado no NexoBar. Layout real na taskbar, rotação e cliques ainda precisam de validação. Veja a [matriz de evidências Windows](windows/docs/VALIDATION.md).
 
 ### Três modos independentes no Windows
 
@@ -38,22 +38,23 @@ O companion compilou com XAML e foi empacotado, assinado com certificado de test
 |---|---|---|
 | **Faixa** | Barra translúcida junto à taskbar; reserva de área opcional, desligada por padrão. | Aplicativo portátil. |
 | **Bandeja** | Um ícone dinâmico por indicador, com tooltip e clique para o detalhe correspondente. | Aplicativo portátil; o Windows controla ordem e overflow. |
-| **WidBar** | Widget com 1–4 indicadores por página, layouts e rotação configuráveis. | Host WidBar e companion compatível instalados separadamente. |
+| **WidBar** | Widget com 1–8 indicadores por página, posições em duas linhas, largura e rotação configuráveis. | Host WidBar e companion compatível instalados separadamente. |
 
 Os interruptores podem ser combinados. **Um único coletor alimenta todos os modos**: habilitar outra apresentação não multiplica as consultas de IA. GPUs são enumeradas individualmente no Windows, preservando os identificadores fornecidos pelo backend. Ligar WidBar nas opções não instala o host nem o companion.
 
 ## Começar
 
-Use um pacote preview somente quando ele estiver disponível junto à versão correspondente, ou [compile a partir do código-fonte](docs/BUILDING.md). Os scripts produzem os arquivos abaixo em `dist/`; a existência do código-fonte não significa que um binário já tenha sido publicado.
+Use um pacote preview somente quando ele estiver disponível junto à versão correspondente, ou [compile a partir do código-fonte](docs/BUILDING.md). A existência do código-fonte não significa que um binário já tenha sido publicado.
 
 | Pacote | Uso |
 |---|---|
 | `NexoBar-macOS-preview.zip` | Extraia e abra `NexoBar.app`. O pacote atual é arm64. A assinatura é local, sem notarização Apple. |
-| `NexoBar-Windows-x64-preview.zip` | Extraia para uma pasta local e abra `NexoBar.exe`. O runtime .NET é incluído. O kit-fonte do WidBar é separado do executável portátil. |
+| `NexoBar-Windows-x64-0.5.0-preview.zip` | Extraia para uma pasta local e abra `NexoBar.exe`. O runtime .NET é incluído. O kit-fonte do WidBar é separado do executável portátil. |
+| `NexoBar-Setup-x64.exe` | Instalador de arquivo único com runtime incluído. Abra, escolha faixa/bandeja/WidBar, revise o destino e confirme. Autostart é opcional. Instalação real pelo Setup ainda pendente de validação. |
 
 Clique no indicador para abrir seu detalhe e use o menu de contexto para personalizar. No macOS, clique com o botão direito na barra. No Windows, o ícone NexoBar na bandeja permite recuperar as opções mesmo com os modos desligados; ele pode estar em “Mostrar ícones ocultos”. Fechar a configuração mantém o coletor; **Sair** encerra o aplicativo.
 
-A inicialização automática não é configurada pelo NexoBar. O preview também não instala hosts, certificados ou extensões do Explorer. Instruções de [compilação e diagnóstico](docs/BUILDING.md), [Windows](windows/README.md) e [companion WidBar](windows/widbar/README.md) explicam os requisitos de cada opção.
+O portátil não configura inicialização automática nem instala hosts ou certificados. O [instalador Windows](windows/setup/README.md) permite autostart por escolha explícita e orienta a instalação do WidBar/companion, incluindo consentimento e UAC quando necessário para confiar no certificado público. O candidato preview usa assinatura local de teste, sem reputação pública comprovada. A UI e as verificações de integridade passaram; a instalação física pelo Setup permanece pendente. Veja também [compilação e diagnóstico](docs/BUILDING.md), [Windows](windows/README.md) e [companion WidBar](windows/widbar/README.md).
 
 ## Integrações de IA
 
@@ -61,10 +62,10 @@ Os indicadores de IA são opcionais. Configure os clientes necessários fora do 
 
 | Provedor | Fonte disponível no código | Disponibilidade |
 |---|---|---|
-| Claude | Consulta temporária `/usage` do Claude Code, em PTY no Mac e ConPTY no Windows. | Mac verificado; ConPTY sintético passou no Windows, consulta autenticada pendente. |
-| Codex | RPC de limites pelo `codex app-server`. | Depende da CLI compatível e da sessão existente. |
-| Kiro | Comando `/usage` pela CLI não interativa. | Depende de versão/formato compatíveis. |
-| GitHub Copilot | Consulta pela sessão existente de `gh api`. | Depende do acesso fornecido pelo cliente. |
+| Claude | Consulta temporária `/usage` do Claude Code, em PTY no Mac e ConPTY no Windows. | Mac verificado; cliente nativo Windows abortou com segurança em setup/trust, sem leitura de cotas. |
+| Codex | RPC de limites pelo `codex app-server`. | Consulta nativa Windows retornou uma janela; depende da CLI e sessão existentes. |
+| Kiro | Comando `/usage` pela CLI não interativa. | Consulta nativa Windows retornou uma janela; depende de versão/formato compatíveis. |
+| GitHub Copilot | Consulta pela sessão existente de `gh api`. | Cliente ausente no ambiente Windows validado; consulta pendente. |
 | Antigravity | `/usage` pela CLI no macOS. | Sem interface validada no Windows neste ciclo. |
 | Cursor, Grok, OpenCode Go e GLM | Sem interface de sessão permitida validada neste modo. | Cotas indisponíveis. |
 
@@ -74,7 +75,7 @@ Implementação não garante que uma conta ou versão específica do cliente exp
 
 Em **Personalizar barra → Pastas das CLIs**, selecione para Claude uma pasta **já confiável no Claude Code**. A pasta do Codex é opcional. Escolher uma pasta no NexoBar não concede confiança ao cliente.
 
-No Windows, Claude exige o executável nativo **`claude.exe`** já autenticado; o shim npm `.cmd` não é executado. A consulta envia somente `/usage`, espera a leitura e encerra o terminal auxiliar. Ela acontece a cada cinco minutos ou por **Atualizar Claude**. Pedidos de login, trust ou setup interrompem a consulta sem resposta automática. A execução real desse fluxo ainda precisa de validação no Windows.
+No Windows, Claude exige o executável nativo **`claude.exe`** já autenticado; o shim npm `.cmd` não é executado. A consulta envia somente `/usage`, espera a leitura e encerra o terminal auxiliar. Ela acontece a cada cinco minutos ou por **Atualizar Claude**. Pedidos de login, trust ou setup interrompem a consulta sem resposta automática. O cliente nativo foi localizado e a recusa de setup/trust foi observada; a leitura real de cotas Claude permanece pendente.
 
 ## Privacidade e controle
 

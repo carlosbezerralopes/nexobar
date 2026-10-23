@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType><TargetFramework>net10.0-windows10.0.22000.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion><EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <UseWPF>true</UseWPF><EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
+    <AssemblyName>NexoBar-Setup-x64</AssemblyName><Version>0.5.0</Version><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings>
+    <PublishSingleFile>true</PublishSingleFile><SelfContained>true</SelfContained><RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract><PublishTrimmed>false</PublishTrimmed>
+    <ApplicationManifest>app.manifest</ApplicationManifest><DebugType>none</DebugType><DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+  <ItemGroup><Compile Remove="core/**/*.cs;tests/**/*.cs" /><ProjectReference Include="core/NexoBar.Setup.Core.csproj" /></ItemGroup>
+  <ItemGroup Condition="'$(SetupPayloadDirectory)' != ''">
+    <EmbeddedResource Include="$(SetupPayloadDirectory)/payload.zip" LogicalName="NexoBar.Setup.Payload.zip" />
+    <EmbeddedResource Include="$(SetupPayloadDirectory)/manifest.json" LogicalName="NexoBar.Setup.Manifest.json" />
+  </ItemGroup>
+</Project>

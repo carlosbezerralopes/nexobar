@@ -1,4 +1,4 @@
-# Claude /usage no Windows 0.4.0
+# Claude /usage no Windows 0.5.0
 
 Contrato: `app/ClaudeConPty.cs` → `core/ClaudeNativeUsage.cs`; pastas em `core/CLIWorkingDirectories.cs`. Sem credenciais, login, trust automático, inferência, fallback status line/Desktop ou transcrição persistida.
 
@@ -18,6 +18,6 @@ Referências oficiais Microsoft:
 - [ClosePseudoConsole](https://learn.microsoft.com/en-us/windows/console/closepseudoconsole): comportamento antes/depois de Windows 11 24H2, drenagem durante encerramento.
 - [Job Objects](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects): ownership de processos/descendentes e kill-on-close.
 
-Verificação atual (23/10/2026): Windows 11 x64, build 26300, .NET SDK 10.0.402; 63 checks ConPTY passaram com clientes e descendentes sintéticos, incluindo timeout, cancelamento, shutdown, falhas de startup e Jobs próprios vazios ao final. O harness usa UTF-8 e aquece o runtime antes da baseline; handles passaram de 326 para 327. Isso verifica o transporte e o lifecycle sintéticos, sem executar Claude autenticado. Reprodução: `smoke-windows.ps1 -TestConPty` em Windows 11 nativo.
+Verificação atual (23/10/2026): Windows 11 x64, build 26300, .NET SDK 10.0.402; 63 checks ConPTY passaram com clientes e descendentes sintéticos, incluindo timeout, cancelamento, shutdown, falhas de startup e Jobs próprios vazios ao final. O harness usa UTF-8 e aquece o runtime antes da baseline; na execução anterior 0.4, handles passaram de 326 para 327. Isso verifica o transporte e o lifecycle sintéticos, sem executar clientes autenticados no harness. Reprodução: `smoke-windows.ps1 -TestConPty` em Windows 11 nativo.
 
-A consulta real só ocorre mediante `-QueryClaude -ClaudeFolder <pasta-ja-confiavel>` ou ao habilitar Claude no app com pasta configurada. Ela não foi executada neste ciclo: somente o shim npm foi observado, sem comprovação do executável nativo disponível. Janela WPF, chooser e interação visual também permanecem pendentes. O registro anterior 0.3.1, limitado a fixtures/cross-build, está preservado na [matriz de evidências](VALIDATION.md#base-preservada--claude-conpty-031-23102026).
+A consulta real só ocorre mediante `-QueryClaude -ClaudeFolder <pasta-ja-confiavel>` ou ao habilitar Claude no app com pasta configurada. Em diagnóstico nativo separado, `claude.exe` foi localizado e executado, mas setup/trust interrompeu a consulta com segurança, sem login, concessão de confiança ou prompt ao modelo. O Job terminou vazio e nenhuma cota Claude foi obtida. A leitura bem-sucedida de `/usage` e a interação do seletor de pasta permanecem pendentes. O registro anterior 0.3.1, limitado a fixtures/cross-build, está preservado na [matriz de evidências](VALIDATION.md#base-preservada--claude-conpty-031-23102026).

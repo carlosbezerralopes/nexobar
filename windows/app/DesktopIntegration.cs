@@ -1,9 +1,11 @@
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Controls;
 using System.Windows.Media;
 using Microsoft.Win32;
+using NexoBar.Core;
 using Screen = System.Windows.Forms.Screen;
 
 namespace NexoBar.Windows;
@@ -90,14 +92,61 @@ internal static class DesktopIntegration
         double scale = Scale(screen);
         var area = screen.WorkingArea;
         int pixelsHeight = (int)Math.Ceiling(height * scale);
-        // Shell state distinguishes fullscreen/presentation from an ordinary maximized window.
-        // https://learn.microsoft.com/windows/win32/api/shellapi/ne-shellapi-query_user_notification_state
-        bool deferToFullscreen = SHQueryUserNotificationState(out int state) >= 0 && state is >= 1 and <= 4;
-        SetWindowPos(new WindowInteropHelper(window).Handle, deferToFullscreen ? new IntPtr(1) : new IntPtr(-1), area.Left,
+        IntPtr handle = new WindowInteropHelper(window).Handle;
+        bool deferToFullscreen = DeferOverlay(handle, screen);
+        SetWindowPos(handle, deferToFullscreen ? new IntPtr(1) : new IntPtr(-1), area.Left,
             area.Bottom - pixelsHeight, area.Width, pixelsHeight, 0x10);
+    }
+    private static bool DeferOverlay(IntPtr bar, Screen screen)
+    {
+        int? state = SHQueryUserNotificationState(out int reportedState) >= 0 ? reportedState : null;
+        if (state == 4) return true;
+        IntPtr foreground = GetForegroundWindow();
+        bool eligible = EligibleForeground(foreground, bar);
+        IntPtr monitor = MonitorFromPoint(new NativePoint { X = screen.Bounds.Left + 1, Y = screen.Bounds.Top + 1 }, 2);
+        bool sameMonitor = eligible && monitor != IntPtr.Zero && MonitorFromWindow(foreground, 0) == monitor;
+        OverlayRectangle? bounds = null;
+        bool maximized = false;
+        if (eligible && sameMonitor)
+        {
+            maximized = IsZoomed(foreground);
+            // DWM excludes invisible resize borders; GetWindowRect is the documented fallback.
+            if (DwmGetWindowRectangle(foreground, 9, out NativeRectangle rectangle, Marshal.SizeOf<NativeRectangle>()) >= 0 ||
+                GetWindowRect(foreground, out rectangle))
+                bounds = new(rectangle.Left, rectangle.Top, rectangle.Right, rectangle.Bottom);
+        }
+        var screenBounds = screen.Bounds;
+        bool defer = OverlayPolicy.ShouldDefer(state, eligible, sameMonitor, maximized, bounds,
+            new(screenBounds.Left, screenBounds.Top, screenBounds.Right, screenBounds.Bottom));
+        // Discard a foreground snapshot that changed while collecting its attributes.
+        return GetForegroundWindow() == foreground && defer;
+    }
+    private static bool EligibleForeground(IntPtr foreground, IntPtr bar)
+    {
+        if (foreground == IntPtr.Zero || foreground == bar || !IsWindowVisible(foreground) || IsIconic(foreground) ||
+            foreground == GetDesktopWindow() || foreground == GetShellWindow()) return false;
+        if (GetWindowThreadProcessId(foreground, out uint processId) == 0 || processId == 0 || processId == Environment.ProcessId)
+            return false;
+        var className = new StringBuilder(256);
+        if (GetClassName(foreground, className, className.Capacity) == 0 ||
+            className.ToString() is "Progman" or "WorkerW" or "Shell_TrayWnd" or "Shell_SecondaryTrayWnd") return false;
+        return DwmGetWindowCloaked(foreground, 14, out int cloaked, sizeof(int)) < 0 || cloaked == 0;
     }
     [DllImport("shell32.dll")] private static extern int SHQueryUserNotificationState(out int state);
     [StructLayout(LayoutKind.Sequential)] private struct NativePoint { public int X, Y; }
+    [StructLayout(LayoutKind.Sequential)] private struct NativeRectangle { public int Left, Top, Right, Bottom; }
+    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] private static extern IntPtr GetDesktopWindow();
+    [DllImport("user32.dll")] private static extern IntPtr GetShellWindow();
+    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr handle, out uint processId);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassName(IntPtr handle, StringBuilder name, int capacity);
+    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool IsWindowVisible(IntPtr handle);
+    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool IsIconic(IntPtr handle);
+    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool IsZoomed(IntPtr handle);
+    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetWindowRect(IntPtr handle, out NativeRectangle rectangle);
+    [DllImport("user32.dll")] private static extern IntPtr MonitorFromWindow(IntPtr handle, uint flags);
+    [DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")] private static extern int DwmGetWindowCloaked(IntPtr handle, int attribute, out int value, int size);
+    [DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")] private static extern int DwmGetWindowRectangle(IntPtr handle, int attribute, out NativeRectangle value, int size);
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] private static extern IntPtr GetWindowLongPtr(IntPtr handle, int index);
     [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")] private static extern IntPtr SetWindowLongPtr(IntPtr handle, int index, IntPtr value);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetWindowPos(IntPtr handle, IntPtr after, int x, int y, int width, int height, uint flags);

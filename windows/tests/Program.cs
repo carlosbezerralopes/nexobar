@@ -181,7 +181,7 @@ File.WriteAllText(path, """{"Displays":null}""");
 Check(Preferences.Load(path).Displays.BarEnabled, "null display options recover to defaults");
 var clampedDisplays = new DisplayOptions { BarOpacity = double.NaN, WidgetItemsPerPage = 99, WidgetLayout = "unknown", WidgetRotationSeconds = 0, WidgetWidth = 900 };
 clampedDisplays.Normalize();
-Check(clampedDisplays.BarOpacity == .75 && clampedDisplays.WidgetItemsPerPage == 4 && clampedDisplays.WidgetLayout == "horizontal" &&
+Check(clampedDisplays.BarOpacity == .75 && clampedDisplays.WidgetItemsPerPage == 8 && clampedDisplays.WidgetLayout == "horizontal" &&
     clampedDisplays.WidgetRotationSeconds == 2 && clampedDisplays.WidgetWidth == 600, "display options normalize corrupt values");
 clampedDisplays.BarOpacity = -1; clampedDisplays.WidgetItemsPerPage = -1; clampedDisplays.WidgetWidth = 1; clampedDisplays.WidgetRotationSeconds = 90;
 clampedDisplays.WidgetLayout = "twoRows"; clampedDisplays.Normalize();
@@ -202,4 +202,90 @@ Check(WidgetPaging.Page(new[] { 0, 1, 2, 3, 4 }, 2, 2).SequenceEqual(new[] { 4 }
 Check(WidgetPaging.Page(new[] { 0, 1, 2 }, -1, 2).SequenceEqual(new[] { 2 }) && WidgetPaging.Page(Array.Empty<int>(), 9, 2).Count == 0, "widget negative and empty page handled");
 Check(WidgetPaging.Cell(0, 4, "twoRows") == (0, 0) && WidgetPaging.Cell(1, 4, "twoRows") == (1, 0) &&
     WidgetPaging.Cell(2, 4, "twoRows") == (0, 1) && WidgetPaging.Cell(3, 4, "horizontal") == (0, 3), "widget layouts use horizontal or two-row cells");
+var monitorBounds = new OverlayRectangle(0, 0, 1920, 1080);
+var workingBounds = new OverlayRectangle(0, 0, 1920, 1040);
+var ordinaryBounds = new OverlayRectangle(100, 100, 1200, 900);
+Check(!OverlayPolicy.ShouldDefer(2, false, true, true, monitorBounds, monitorBounds), "overlay BUSY own maximized settings remains topmost");
+Check(!OverlayPolicy.ShouldDefer(2, true, true, true, monitorBounds, monitorBounds), "overlay maximized external window is not fullscreen even with auto-hide taskbar");
+Check(!OverlayPolicy.ShouldDefer(2, true, true, false, ordinaryBounds, monitorBounds), "overlay ordinary restored window remains topmost");
+Check(!OverlayPolicy.ShouldDefer(2, true, true, false, workingBounds, monitorBounds), "overlay working area alone does not cover monitor");
+foreach (int? state in new int?[] { 1, 2, 5, 6, 7, null, 99 })
+{
+    Check(OverlayPolicy.ShouldDefer(state, true, true, false, monitorBounds, monitorBounds), "overlay full monitor restored external window defers state " + state);
+    Check(!OverlayPolicy.ShouldDefer(state, false, true, false, monitorBounds, monitorBounds), "overlay rejects ineligible foreground state " + state);
+    Check(!OverlayPolicy.ShouldDefer(state, true, false, false, monitorBounds, monitorBounds), "overlay rejects other monitor state " + state);
+    Check(!OverlayPolicy.ShouldDefer(state, true, true, false, null, monitorBounds), "overlay missing geometry is not fullscreen state " + state);
+    Check(!OverlayPolicy.ShouldDefer(state, true, true, true, monitorBounds, monitorBounds), "overlay excludes maximized geometry state " + state);
+}
+Check(OverlayPolicy.ShouldDefer(3, true, true, true, null, monitorBounds), "overlay D3D eligible same monitor requires no geometry");
+Check(!OverlayPolicy.ShouldDefer(3, true, false, false, monitorBounds, monitorBounds), "overlay D3D other monitor remains topmost");
+Check(!OverlayPolicy.ShouldDefer(3, false, true, false, monitorBounds, monitorBounds), "overlay D3D ineligible foreground remains topmost");
+Check(OverlayPolicy.ShouldDefer(4, false, false, false, null, monitorBounds), "overlay presentation mode defers globally without foreground");
+var negativeMonitor = new OverlayRectangle(-1920, -1080, 0, 0);
+Check(OverlayPolicy.ShouldDefer(2, true, true, false, negativeMonitor, negativeMonitor), "overlay exact negative monitor coordinates cover");
+Check(OverlayPolicy.ShouldDefer(null, true, true, false, new(-1921, -1081, 1, 1), negativeMonitor), "overlay enclosing bounds cover negative monitor");
+foreach (var shortBounds in new[] { new OverlayRectangle(1, 0, 1920, 1080), new(0, 1, 1920, 1080), new(0, 0, 1919, 1080), new(0, 0, 1920, 1079) })
+    Check(!OverlayPolicy.ShouldDefer(2, true, true, false, shortBounds, monitorBounds), "overlay missing one pixel at any edge is not fullscreen " + shortBounds);
+foreach (var invalidBounds in new[] { new OverlayRectangle(0, 0, 0, 1080), new(0, 0, 1920, 0), new(1920, 0, 0, 1080), new(0, 1080, 1920, 0) })
+{
+    Check(!OverlayPolicy.ShouldDefer(2, true, true, false, invalidBounds, monitorBounds), "overlay empty or inverted foreground rejected " + invalidBounds);
+    Check(!OverlayPolicy.ShouldDefer(2, true, true, false, monitorBounds, invalidBounds), "overlay empty or inverted monitor rejected " + invalidBounds);
+}
+// M06: custom rows are an additive preference; physical identity remains stable.
+string[] customIds = ["cpu", "memory", "claude", "codex", "kiro"];
+var custom = new DisplayOptions { WidgetWidth = 402, BarEnabled = false, TrayEnabled = true, WidgetEnabled = true };
+custom.UseHardwareAgentsPreset();
+var customCells = WidgetPaging.LayoutPage(customIds, x => x, 0, custom.WidgetItemsPerPage, custom.WidgetLayout, custom.WidgetPlacements);
+Check(customCells.Count(x => x.Row == 0) == 2 && customCells.Count(x => x.Row == 1) == 3 &&
+    customCells.Select(x => x.Item).SequenceEqual(customIds), "custom preset retains all five IDs in independent 2+3 rows");
+Check(custom.WidgetWidth == 402 && !custom.BarEnabled && custom.TrayEnabled && custom.WidgetEnabled,
+    "custom preset preserves width and presentation switches");
+Check(custom.WidgetItemsPerPage == 5 && custom.WidgetLayout == "customRows", "custom preset sets five slots and custom layout");
+foreach (int size in new[] { 0, 1, 5, 8, 9 })
+{
+    var ids = Enumerable.Range(0, size).Select(i => "item:" + i).ToArray();
+    var positions = ids.Select((id, i) => new WidgetPlacement(id, i % 2, i / 2)).ToArray();
+    var pages = Enumerable.Range(0, WidgetPaging.PageCount(size, 8)).SelectMany(p =>
+        WidgetPaging.LayoutPage(ids, x => x, p, 8, "customRows", positions)).ToArray();
+    Check(pages.Length == size && pages.Select(x => x.Item).Distinct().Count() == size, "custom pages cover once size " + size);
+}
+var secondPage = WidgetPaging.LayoutPage(Enumerable.Range(0, 9).Select(i => "id" + i).ToArray(), x => x, 1, 8, "customRows");
+Check(secondPage is [{ Item: "id8", Row: 0, Column: 0 }], "custom final page partial without duplicate slot");
+var bottomOnly = WidgetPaging.LayoutPage(new[] { "claude", "codex" }, x => x, 0, 8, "customRows", custom.WidgetPlacements);
+Check(bottomOnly.All(x => x.Row == 1) && bottomOnly.Select(x => x.Row).Distinct().Count() == 1 &&
+    bottomOnly.Select(x => x.Column).SequenceEqual(new[] { 0, 1 }), "empty top row has no cells or reserved column");
+Check(WidgetPaging.LayoutPage(Array.Empty<string>(), x => x, -9, 8, "customRows").Count == 0, "empty custom layout safe");
+var malformedPositions = new List<WidgetPlacement> { new("cpu", 9, 10), new("cpu", 0, -100), new(" ", 0, 0),
+    new(new string('x', 257), 0, 0), new("control\n", 0, 0), new("memory", -7, int.MaxValue), null! };
+var normalizedPositions = WidgetPaging.NormalizePlacements(malformedPositions);
+Check(normalizedPositions.Count == 2 && normalizedPositions.Single(x => x.Id == "cpu").Row == 1 &&
+    normalizedPositions.Single(x => x.Id == "memory").Row == 0 && normalizedPositions.All(x => x.Order == 0),
+    "placement normalization first duplicate wins and clamps row with per-row reindex");
+Check(WidgetPaging.NormalizePlacements(Enumerable.Range(0, 150).Select(i => new WidgetPlacement("id" + i, 0, i))).Count == 128,
+    "placement count bounded at 128");
+Check(WidgetPaging.NormalizePlacements([new("b", 0, 0), new("a", 0, 0)]).Select(x => x.Id).SequenceEqual(new[] { "a", "b" }),
+    "placement ties use ordinal ID");
+custom.MoveWidget("codex", -1, customIds);
+Check(custom.WidgetPlacements.Where(x => x.Row == 1).Select(x => x.Id).SequenceEqual(new[] { "codex", "claude", "kiro" }),
+    "custom arrow moves within row");
+custom.MoveWidget("codex", -1, customIds);
+Check(custom.WidgetPlacements.First(x => x.Row == 1).Id == "codex", "custom row boundary does not wrap");
+custom.ChangeWidgetRow("cpu", customIds);
+Check(custom.WidgetPlacements.Single(x => x.Id == "cpu") is { Row: 1, Order: 3 }, "custom change row appends and keeps ID");
+custom.WidgetPlacements.Add(new("gpu:physical-1", 1, 4)); custom.Normalize();
+var hiddenPositions = custom.WidgetPlacements.ToArray();
+var disconnected = WidgetPaging.LayoutPage(customIds, x => x, 0, 8, "customRows", custom.WidgetPlacements);
+var reconnected = WidgetPaging.LayoutPage(customIds.Append("gpu:physical-1").ToArray(), x => x, 0, 8, "customRows", custom.WidgetPlacements);
+Check(disconnected.Count == 5 && reconnected.Single(x => x.Item == "gpu:physical-1").Row == 1 &&
+    custom.WidgetPlacements.SequenceEqual(hiddenPositions), "GPU disappearance and return preserve placement identity");
+var appended = WidgetPaging.LayoutPage(new[] { "fresh", "kiro", "cpu", "unknown" }, x => x, 0, 8, "customRows", [new("cpu", 0, 0), new("kiro", 1, 0)]);
+Check(appended.Select(x => x.Item).SequenceEqual(new[] { "cpu", "fresh", "unknown", "kiro" }), "missing placements append row zero in snapshot order");
+var migratedLayout = new DisplayOptions { WidgetLayout = "twoRows", WidgetItemsPerPage = 4, WidgetWidth = 402 };
+migratedLayout.UseCustomLayout(customIds);
+Check(migratedLayout.WidgetPlacements.Single(x => x.Id == "cpu").Row == 0 && migratedLayout.WidgetPlacements.Single(x => x.Id == "memory").Row == 1 &&
+    migratedLayout.WidgetPlacements.Single(x => x.Id == "codex").Row == 1 && migratedLayout.WidgetWidth == 402, "first custom selection converts legacy column-first layout");
+var persistedCustom = new Preferences { Displays = custom }; persistedCustom.Save(path);
+var loadedCustom = Preferences.Load(path);
+Check(loadedCustom.Displays.WidgetPlacements.SequenceEqual(custom.WidgetPlacements) && loadedCustom.Displays.WidgetLayout == "customRows" &&
+    loadedCustom.Displays.WidgetItemsPerPage == 5 && loadedCustom.Displays.WidgetWidth == 402, "custom placement preferences roundtrip without migration loss");
 Console.WriteLine($"SUCCESS {count} checks; no authenticated CLI or native Windows calls executed.");
