@@ -198,11 +198,20 @@ internal sealed class SettingsWindow : Window
                 var values = new StackPanel { Orientation = Orientation.Vertical, VerticalAlignment = VerticalAlignment.Center,
                     Margin = new Thickness(5, 0, 5, 0), ToolTip = item.Id + " · demonstrativo" };
                 var lines = PresentationDemo.Lines(item, preferences);
+                bool stacked = lines.Count > 1; // name centered beside the stacked session/weekly lines, as in the widget
                 for (int i = 0; i < lines.Count; i++) values.Children.Add(new TextBlock {
-                    Text = (i == 0 ? item.Label + Presentation.Separator : "") + lines[i],
+                    Text = (i == 0 && !stacked ? item.Label + Presentation.Separator : "") + lines[i],
                     TextTrimming = TextTrimming.CharacterEllipsis, Foreground = Foreground, FontSize = 11,
                     LineHeight = 12, LineStackingStrategy = LineStackingStrategy.BlockLineHeight });
-                Grid.SetColumn(values, cell.Column); line.Children.Add(values);
+                FrameworkElement block = values;
+                if (stacked)
+                {
+                    var group = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = values.Margin, ToolTip = values.ToolTip };
+                    values.Margin = new Thickness(4, 0, 0, 0);
+                    group.Children.Add(new TextBlock { Text = item.Label, Foreground = Foreground, FontSize = 11, VerticalAlignment = VerticalAlignment.Center });
+                    group.Children.Add(values); block = group;
+                }
+                Grid.SetColumn(block, cell.Column); line.Children.Add(block);
             }
             if (grid.RowDefinitions.Count > 0) grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(options.WidgetRowGap) });
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
