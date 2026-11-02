@@ -4,6 +4,8 @@ param(
     [Parameter(Mandatory)][string]$PortableDirectory,
     [Parameter(Mandatory)][string]$SignedCompanion,
     [string]$PublicCertificate,
+    # Folder with the official PawnIO_setup.exe, COPYING.txt (GPL) and README-PawnIO.txt.
+    [Parameter(Mandatory)][string]$PawnIODirectory,
     [string]$ArtifactsDirectory,
     [string]$PackagesDirectory
 )
@@ -25,7 +27,7 @@ $SignedCompanion = (Resolve-Path -LiteralPath $SignedCompanion).Path
 Write-Host 'Conferindo versão, identidade e assinatura das entradas…'
 if (!(Test-Path -LiteralPath (Join-Path $PortableDirectory 'NexoBar.exe'))) { throw 'Portátil não contém NexoBar.exe.' }
 $version = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $PortableDirectory 'NexoBar.exe')).ProductVersion
-if ($version -notmatch '^0\.6\.1([+.-]|$)') { throw "Versão portátil incompatível: $version" }
+if ($version -notmatch '^0\.7\.0([+.-]|$)') { throw "Versão portátil incompatível: $version" }
 if ((Get-Item -LiteralPath $SignedCompanion).Extension -ne '.msix') { throw 'Companion deve ser MSIX.' }
 $signature = Get-AuthenticodeSignature -LiteralPath $SignedCompanion
 if ($signature.Status -ne 'Valid' -or !$signature.SignerCertificate) { throw "Companion sem assinatura válida/confiável no ambiente de build: $($signature.Status). Não aceitar erro de cadeia como prova de integridade." }
@@ -44,7 +46,8 @@ try {
     $reader = [IO.StreamReader]::new($archive.GetEntry('AppxManifest.xml').Open())
     try { [xml]$appx = $reader.ReadToEnd() } finally { $reader.Dispose() }
     $identity = $appx.Package.Identity
-    if ($identity.Name -ne 'NexoBar.Widget' -or $identity.Publisher -ne 'CN=NexoBar' -or $identity.Version -ne '0.6.1.0' -or $identity.ProcessorArchitecture -ne 'x64') { throw 'Identidade/versão/arquitetura do companion incompatível.' }
+    if ($identity.Name -ne 'NexoBar.Widget' -or $identity.Publisher -ne 'CN=NexoBar' -or $identity.Version -notmatch '^0\.7\.0\.\d+$' -or $identity.ProcessorArchitecture -ne 'x64') { throw 'Identidade/versão/arquitetura do companion incompatível.' }
+    $companionVersion = [string]$identity.Version
 } finally { $archive.Dispose() }
 $context = Join-Path $ArtifactsDirectory ('payload-' + [Guid]::NewGuid().ToString('N'))
 Write-Host 'Preparando payload interno com documentação/licenças e hashes…'
@@ -67,10 +70,27 @@ foreach ($file in $files) {
 if (Get-ChildItem -LiteralPath $PortableDirectory -Recurse -File | Where-Object { $_.Extension -in @('.pfx','.p12','.key','.pem') }) { throw 'Material privado no portátil: remova-o da entrada do build.' }
 Copy-Item -LiteralPath $SignedCompanion -Destination (Join-Path $stage 'companion/NexoBar.Widget.msix')
 if ($PublicCertificate) { Copy-Item -LiteralPath $PublicCertificate -Destination (Join-Path $stage 'companion/publisher.cer') }
+# Sensor service: self-contained single file, installed under Program Files by the elevated helper.
+$PawnIODirectory = (Resolve-Path -LiteralPath $PawnIODirectory).Path
+$pawnio = Join-Path $PawnIODirectory 'PawnIO_setup.exe'
+# Official 2.2.0 release digest; any other binary is refused.
+if ((Get-FileHash -LiteralPath $pawnio -Algorithm SHA256).Hash.ToLowerInvariant() -ne '1f519a22e47187f70a1379a48ca604981c4fcf694f4e65b734aaa74a9fba3032') { throw 'PawnIO_setup.exe diferente da release oficial 2.2.0.' }
+$pawnioSignature = Get-AuthenticodeSignature -LiteralPath $pawnio
+if ($pawnioSignature.Status -ne 'Valid' -or $pawnioSignature.SignerCertificate.Subject -notmatch '(^|, )CN=namazso\.eu(,|$)') { throw 'Assinatura do PawnIO inválida.' }
+$sensorsPublish = Join-Path $context 'sensors-publish'
+Write-Host 'Publicando serviço de sensores autocontido…'
+& dotnet publish (Join-Path $PSScriptRoot '../sensors/NexoBar.Sensors.csproj') -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true --artifacts-path (Join-Path $ArtifactsDirectory 'sensors') -o $sensorsPublish
+if ($LASTEXITCODE -ne 0) { throw 'Build do serviço de sensores falhou.' }
+New-Item -ItemType Directory -Force (Join-Path $stage 'sensors/licenses') | Out-Null
+Copy-Item -LiteralPath (Join-Path $sensorsPublish 'NexoBar.Sensors.exe') -Destination (Join-Path $stage 'sensors/NexoBar.Sensors.exe')
+Copy-Item -LiteralPath $pawnio -Destination (Join-Path $stage 'sensors/PawnIO_setup.exe')
+Copy-Item -LiteralPath (Join-Path $PawnIODirectory 'COPYING.txt') -Destination (Join-Path $stage 'sensors/licenses/PawnIO-COPYING.txt')
+Copy-Item -LiteralPath (Join-Path $PawnIODirectory 'README-PawnIO.txt') -Destination (Join-Path $stage 'sensors/licenses/README-PawnIO.txt')
+Get-ChildItem -LiteralPath (Join-Path $PortableDirectory 'licenses') -File | Where-Object Name -match 'LibreHardwareMonitor|netcore\.app\.runtime' | Copy-Item -Destination (Join-Path $stage 'sensors/licenses')
 $entries = @(Get-ChildItem -LiteralPath $stage -Recurse -File | Sort-Object FullName | ForEach-Object {
     [ordered]@{ Path = [IO.Path]::GetRelativePath($stage, $_.FullName).Replace('\','/'); Bytes = $_.Length; Sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
 })
-$manifest = [ordered]@{ SchemaVersion=1; Version='0.6.1'; Architecture='x64'; CompanionName='NexoBar.Widget'; CompanionPublisher='CN=NexoBar'; CompanionVersion='0.6.1.0'; Files=$entries }
+$manifest = [ordered]@{ SchemaVersion=1; Version='0.7.0'; Architecture='x64'; CompanionName='NexoBar.Widget'; CompanionPublisher='CN=NexoBar'; CompanionVersion=$companionVersion; Files=$entries }
 $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $context 'manifest.json') -Encoding utf8NoBOM
 $output = [IO.Compression.ZipFile]::Open((Join-Path $context 'payload.zip'), [IO.Compression.ZipArchiveMode]::Create)
 try { foreach ($file in Get-ChildItem -LiteralPath $stage -Recurse -File) { [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($output, $file.FullName, [IO.Path]::GetRelativePath($stage,$file.FullName).Replace('\','/'), [IO.Compression.CompressionLevel]::Optimal) | Out-Null } }
@@ -87,4 +107,4 @@ $env:DOTNET_BUNDLE_EXTRACT_BASE_DIR = Join-Path $ArtifactsDirectory 'runtime-ext
 Write-Host 'Verificando payload e assinatura MSIX incorporados (sem instalação)…'
 $verification = Start-Process -FilePath $exe -ArgumentList '--verify-embedded-payload' -WindowStyle Hidden -PassThru -Wait -RedirectStandardOutput (Join-Path $ArtifactsDirectory 'embedded-verification.json') -RedirectStandardError (Join-Path $ArtifactsDirectory 'embedded-verification-error.txt')
 if ($verification.ExitCode -ne 0) { throw "Payload incorporado recusado: $($verification.ExitCode). Leia embedded-verification-error.txt." }
-[ordered]@{ exe=$exe; bytes=(Get-Item -LiteralPath $exe).Length; sha256=(Get-FileHash -LiteralPath $exe).Hash.ToLowerInvariant(); version='0.6.1'; selfContained=$true; singleFile=$true; signedExe=$false; payloadContext=$context; embeddedVerification=(Get-Content -Raw (Join-Path $ArtifactsDirectory 'embedded-verification.json')); deployment='não executado; Store/MSIX/trust simulados no harness' } | ConvertTo-Json -Depth 6 | Tee-Object -FilePath (Join-Path $ArtifactsDirectory 'build-result.json')
+[ordered]@{ exe=$exe; bytes=(Get-Item -LiteralPath $exe).Length; sha256=(Get-FileHash -LiteralPath $exe).Hash.ToLowerInvariant(); version='0.7.0'; selfContained=$true; singleFile=$true; signedExe=$false; payloadContext=$context; embeddedVerification=(Get-Content -Raw (Join-Path $ArtifactsDirectory 'embedded-verification.json')); deployment='não executado; Store/MSIX/trust simulados no harness' } | ConvertTo-Json -Depth 6 | Tee-Object -FilePath (Join-Path $ArtifactsDirectory 'build-result.json')

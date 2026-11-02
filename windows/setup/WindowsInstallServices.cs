@@ -21,6 +21,16 @@ public sealed class WindowsInstallServices(PackageDeployment deployment) : IInst
             try { if (p.SessionId == current.SessionId) return true; } catch (InvalidOperationException) { }
         return false;
     }
+    // NexoBar keeps no unsaved state (preferences are written on change), so a running copy in this session is closed for the update.
+    public bool CloseApp()
+    {
+        bool closed = false;
+        using var current = Process.GetCurrentProcess();
+        foreach (var p in Process.GetProcessesByName("NexoBar")) using (p)
+            try { if (p.SessionId == current.SessionId) { p.Kill(entireProcessTree: true); p.WaitForExit(5000); closed = true; } }
+            catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception) { }
+        return closed;
+    }
     public byte[] CreateShortcut(string executable) => WithShortcut(null, link => {
         link.TargetPath = executable; link.WorkingDirectory = Path.GetDirectoryName(executable); link.Arguments = "";
         link.Description = "NexoBar — indicadores de hardware e cotas"; link.IconLocation = executable + ",0";

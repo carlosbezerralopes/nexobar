@@ -22,9 +22,10 @@ internal sealed class SettingsWindow : Window
     private StackPanel? widgetRows;
     private ScrollViewer? settingsScroll;
     private readonly System.Windows.Threading.DispatcherTimer statusRefresh;
-    internal SettingsWindow(Preferences preferences, Func<string?> apply, Func<bool>? widgetConnected = null)
+    private readonly Func<string, string?> officialName;
+    internal SettingsWindow(Preferences preferences, Func<string?> apply, Func<bool>? widgetConnected = null, Func<string, string?>? officialName = null)
     {
-        this.preferences = preferences; this.apply = apply; this.widgetConnected = widgetConnected ?? (() => false);
+        this.preferences = preferences; this.apply = apply; this.widgetConnected = widgetConnected ?? (() => false); this.officialName = officialName ?? (_ => null);
         Title = "NexoBar · Personalizar"; Width = 750; Height = 650; MinWidth = 620; MinHeight = 400;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         statusRefresh = new System.Windows.Threading.DispatcherTimer(TimeSpan.FromSeconds(3), System.Windows.Threading.DispatcherPriority.Background,
@@ -69,7 +70,7 @@ internal sealed class SettingsWindow : Window
         for (int i = 1; i < monitors.Items.Count; i++) if (((ComboBoxItem)monitors.Items[i]).Tag as string == preferences.MonitorId) monitors.SelectedIndex = i;
         monitors.SelectionChanged += (_, _) => preferences.MonitorId = ((ComboBoxItem)monitors.SelectedItem).Tag as string;
         panel.Children.Add(monitors);
-        panel.Children.Add(Toggle("Memória: em uso / total (GiB)", preferences.MemoryNominal, v => { preferences.MemoryNominal = v; PreviewWidget(); }));
+        panel.Children.Add(Toggle("Memória: em uso / total (GB)", preferences.MemoryNominal, v => { preferences.MemoryNominal = v; PreviewWidget(); }));
         panel.Children.Add(Toggle("Cotas empilhadas dentro de cada indicador (somente janelas reais)", preferences.StackedQuotas, v => { preferences.StackedQuotas = v; PreviewWidget(); }));
         panel.Children.Add(Toggle("Mostrar tempo até a renovação", preferences.ShowQuotaReset, v => { preferences.ShowQuotaReset = v; PreviewWidget(); }));
         panel.Children.Add(Toggle("Detalhar tempo restante (2h13m, 3d4h)", preferences.DetailedCountdown, v => { preferences.DetailedCountdown = v; PreviewWidget(); }));
@@ -92,11 +93,28 @@ internal sealed class SettingsWindow : Window
             row.Children.Add(enabled);
             var name = new TextBox { Text = pref.Label, MaxLength = 64, Margin = new Thickness(0, 0, 12, 0), ToolTip = pref.Id };
             name.TextChanged += (_, _) => Replace(pref.Id, p => p with { Label = Preferences.SafeLabel(name.Text, pref.Id) });
-            Grid.SetColumn(name, 1); row.Children.Add(name);
-            if (pref.Id == "cpu" || pref.Id.StartsWith("gpu:", StringComparison.Ordinal))
+            FrameworkElement nameCell = name;
+            // The hardware's own name (e.g. the GPU model) is always one click away from a short custom label.
+            if (officialName(pref.Id) is { } official)
             {
-                var temperature = Toggle("Temperatura", pref.ShowTemperature, v => Replace(pref.Id, p => p with { ShowTemperature = v }));
-                Grid.SetColumn(temperature, 2); row.Children.Add(temperature);
+                var dock = new DockPanel { Margin = new Thickness(0, 0, 12, 0) };
+                var restore = new Button { Content = "↺", ToolTip = "Usar o nome oficial: " + official, Padding = new Thickness(6, 1, 6, 1), Margin = new Thickness(4, 0, 0, 0) };
+                restore.Click += (_, _) => name.Text = official;
+                System.Windows.Automation.AutomationProperties.SetName(restore, "Usar o nome oficial " + official);
+                DockPanel.SetDock(restore, Dock.Right); dock.Children.Add(restore);
+                name.Margin = new Thickness(0); dock.Children.Add(name); nameCell = dock;
+            }
+            Grid.SetColumn(nameCell, 1); row.Children.Add(nameCell);
+            if (pref.Id == "cpu" || Preferences.IsDevice(pref.Id))
+            {
+                var options = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+                options.Children.Add(Toggle("Temperatura", pref.ShowTemperature, v => Replace(pref.Id, p => p with { ShowTemperature = v })));
+                if (pref.Id.StartsWith("disk:", StringComparison.Ordinal))
+                {
+                    options.Children.Add(Toggle("Espaço livre", pref.ShowFreeSpace, v => Replace(pref.Id, p => p with { ShowFreeSpace = v })));
+                    options.Children.Add(Toggle("Leitura/escrita", pref.ShowRates, v => Replace(pref.Id, p => p with { ShowRates = v })));
+                }
+                Grid.SetColumn(options, 2); row.Children.Add(options);
             }
             for (int direction = -1; direction <= 1; direction += 2)
             {
@@ -108,7 +126,7 @@ internal sealed class SettingsWindow : Window
             panel.Children.Add(row);
         }
         panel.Children.Add(Label("GPUs desconectadas mantêm nome e ordem salvos. Elas voltam à barra quando forem detectadas novamente."));
-        panel.Children.Add(Label("Sem inicialização automática ou elevação. Sensores inacessíveis e cotas ausentes aparecem como indisponíveis."));
+        panel.Children.Add(Label("Inicialização automática pelo menu da bandeja (Iniciar com o Windows); sem elevação. Sensores inacessíveis e cotas ausentes aparecem como indisponíveis."));
         panel.Children.Add(Label("Claude exige o executável nativo claude.exe e uma sessão já autenticada; shims .cmd não são executados. Cursor, Grok, OpenCode Go, GLM e Antigravity não têm uma fonte segura validada no Windows."));
         settingsScroll = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         settingsScroll.Loaded += (_, _) => settingsScroll.ScrollToVerticalOffset(offset);
@@ -133,8 +151,14 @@ internal sealed class SettingsWindow : Window
             previewPage = 0; Render();
         };
         panel.Children.Add(layout);
-        var preset = new Button { Content = "CPU e memória acima; Claude, Codex e Kiro abaixo", HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 4, 8, 4) };
-        preset.Click += (_, _) => { preferences.Displays.UseHardwareAgentsPreset(); previewPage = 0; Render(); };
+        var alignment = new ComboBox { HorizontalAlignment = HorizontalAlignment.Left, MinWidth = 220, Margin = new Thickness(0, 4, 0, 6) };
+        foreach (var (text, tag) in new[] { ("Alinhar à esquerda", "left"), ("Centralizar", "center"), ("Alinhar à direita", "right") })
+            alignment.Items.Add(new ComboBoxItem { Content = text, Tag = tag });
+        alignment.SelectedIndex = preferences.Displays.WidgetAlignment switch { "center" => 1, "right" => 2, _ => 0 };
+        alignment.SelectionChanged += (_, _) => { preferences.Displays.WidgetAlignment = (string)((ComboBoxItem)alignment.SelectedItem).Tag; PreviewWidget(); };
+        panel.Children.Add(alignment);
+        var preset = new Button { Content = "CPU, GPU, SSD e RAM acima; Claude, Codex e Kiro abaixo", HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 4, 8, 4) };
+        preset.Click += (_, _) => { preferences.Displays.UseHardwareAgentsPreset(preferences.Indicators.Where(p => p.Enabled && Preferences.IsDevice(p.Id)).Select(p => p.Id).ToArray()); previewPage = 0; Render(); };
         panel.Children.Add(preset);
         panel.Children.Add(Label("2+3 é um preset: organize livremente 1+4, 3+2 ou outra distribuição. O limite é de oito indicadores no total por página, não por linha. Cotas empilhadas são linhas internas de cada indicador."));
         widgetRows = new StackPanel(); panel.Children.Add(widgetRows); RefreshWidgetRows();
@@ -166,16 +190,16 @@ internal sealed class SettingsWindow : Window
         var grid = new Grid();
         foreach (var row in page.GroupBy(x => x.Row))
         {
-            var line = new Grid();
+            var line = new Grid { HorizontalAlignment = options.WidgetAlignment switch { "center" => HorizontalAlignment.Center, "right" => HorizontalAlignment.Right, _ => HorizontalAlignment.Left } };
             foreach (var cell in row)
             {
-                line.ColumnDefinitions.Add(new ColumnDefinition());
+                line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                 var item = cell.Item;
                 var values = new StackPanel { Orientation = Orientation.Vertical, VerticalAlignment = VerticalAlignment.Center,
                     Margin = new Thickness(5, 0, 5, 0), ToolTip = item.Id + " · demonstrativo" };
                 var lines = PresentationDemo.Lines(item, preferences);
                 for (int i = 0; i < lines.Count; i++) values.Children.Add(new TextBlock {
-                    Text = (i == 0 ? item.Label + " · " : "") + lines[i],
+                    Text = (i == 0 ? item.Label + Presentation.Separator : "") + lines[i],
                     TextTrimming = TextTrimming.CharacterEllipsis, Foreground = Foreground, FontSize = 11,
                     LineHeight = 12, LineStackingStrategy = LineStackingStrategy.BlockLineHeight });
                 Grid.SetColumn(values, cell.Column); line.Children.Add(values);

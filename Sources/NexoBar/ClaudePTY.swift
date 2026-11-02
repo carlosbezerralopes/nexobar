@@ -2,11 +2,12 @@ import Foundation
 import Darwin
 
 enum ClaudePTYError: Error {
-    case folderUnavailable, setupRequired, usageFailed
+    case folderUnavailable, permissionChoiceRequired, setupRequired, usageFailed
 
     var message: String {
         switch self {
         case .folderUnavailable: return "Escolha uma pasta já confiável no Claude Code"
+        case .permissionChoiceRequired: return "Claude Code aguarda uma escolha de permissão; abra o cliente e responda"
         case .setupRequired: return "Claude Code exige configuração ou confiança na pasta; abra o cliente"
         case .usageFailed: return "Claude Code não conseguiu carregar as cotas"
         }
@@ -122,7 +123,7 @@ enum ClaudePTY {
 
     private static func isInitialPrompt(_ text: String) -> Bool {
         let lower = text.lowercased()
-        guard lower.contains("claude code"), lower.contains("max") || lower.contains("pro") || lower.contains("claude.ai") else { return false }
+        guard lower.contains("claude code"), lower.contains("max") || lower.contains("pro") || lower.contains("ultra") || lower.contains("claude.ai") else { return false }
         return text.split(separator: "\n", omittingEmptySubsequences: false).contains { line in
             let prompt = line.trimmingCharacters(in: .whitespacesAndNewlines)
             return ["❯", "›", "$", ">"].contains(prompt)
@@ -139,7 +140,8 @@ enum ClaudePTY {
         if ["not logged in", "please log in", "run /login", "login required", "sign in to", "authentication required"].contains(where: lower.contains) {
             throw AIReadError.authentication
         }
-        if ["do you trust", "trust this", "trust the files", "trust folder", "trust this folder", "permission required",
+        if lower.contains("permission required") { throw ClaudePTYError.permissionChoiceRequired }
+        if ["do you trust", "trust this", "trust the files", "trust folder", "trust this folder",
             "choose the text style", "choose a theme", "select a theme", "let’s get started", "let's get started"].contains(where: lower.contains) {
             throw ClaudePTYError.setupRequired
         }

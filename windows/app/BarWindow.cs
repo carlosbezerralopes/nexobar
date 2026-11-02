@@ -36,8 +36,10 @@ internal sealed class BarWindow : Window, IDisposable
     private SettingsWindow? settings;
     private AppBarDock? docking;
     private int openMenus;
+    private readonly bool isolated;
     internal BarWindow(string directory, bool isolated = false)
     {
+        this.isolated = isolated;
         preferencesPath = Path.Combine(directory, "indicators.json");
         preferences = Preferences.Load(preferencesPath);
         ai = new(preferences);
@@ -47,13 +49,14 @@ internal sealed class BarWindow : Window, IDisposable
         SourceInitialized += (_, _) => { DesktopIntegration.NonActivating(this); docking = new AppBarDock(this, () => Render()); };
         Loaded += (_, _) => { Tick(); };
         Closing += OnClosing;
-        tray = new System.Windows.Forms.NotifyIcon { Icon = System.Drawing.SystemIcons.Application, Text = "NexoBar · configurações e sair (sempre disponível)", Visible = true };
+        tray = new System.Windows.Forms.NotifyIcon { Icon = AppIcon(), Text = "NexoBar · configurações e sair (sempre disponível)", Visible = true };
         var trayMenu = new System.Windows.Forms.ContextMenuStrip();
         trayMenu.Items.Add("Mostrar faixa", null, (_, _) => Dispatcher.Invoke(Recover));
         var barToggle = trayMenu.Items.Add("Faixa fixa", null, (_, _) => Dispatcher.Invoke(() => ToggleDisplay("bar"))) as System.Windows.Forms.ToolStripMenuItem;
         var trayToggle = trayMenu.Items.Add("Indicadores na bandeja", null, (_, _) => Dispatcher.Invoke(() => ToggleDisplay("tray"))) as System.Windows.Forms.ToolStripMenuItem;
         var widgetToggle = trayMenu.Items.Add("Widget WidBar", null, (_, _) => Dispatcher.Invoke(() => ToggleDisplay("widget"))) as System.Windows.Forms.ToolStripMenuItem;
-        trayMenu.Opening += (_, _) => { barToggle!.Checked = preferences.Displays.BarEnabled; trayToggle!.Checked = preferences.Displays.TrayEnabled; widgetToggle!.Checked = preferences.Displays.WidgetEnabled; };
+        var autoStartToggle = isolated ? null : trayMenu.Items.Add("Iniciar com o Windows", null, (_, _) => Dispatcher.Invoke(ToggleAutoStart)) as System.Windows.Forms.ToolStripMenuItem;
+        trayMenu.Opening += (_, _) => { barToggle!.Checked = preferences.Displays.BarEnabled; trayToggle!.Checked = preferences.Displays.TrayEnabled; widgetToggle!.Checked = preferences.Displays.WidgetEnabled; if (autoStartToggle is not null) autoStartToggle.Checked = AutoStart.Enabled; };
         trayMenu.Items.Add("Personalizar barra…", null, (_, _) => Dispatcher.Invoke(OpenSettings));
         trayMenu.Items.Add("Atualizar Claude", null, (_, _) => Dispatcher.Invoke(RefreshClaude));
         trayMenu.Items.Add("Reler cotas", null, (_, _) => Dispatcher.Invoke(Reread));
@@ -98,7 +101,7 @@ internal sealed class BarWindow : Window, IDisposable
         {
             var values = await Task.Run(hardware.Read, lifetime.Token);
             if (disposed) return;
-            var oldGpu = readings.Keys.Where(k => k.StartsWith("gpu:", StringComparison.Ordinal)).ToArray();
+            var oldGpu = readings.Keys.Where(Preferences.IsDevice).ToArray();
             foreach (string id in oldGpu) if (!values.Any(r => r.Id == id)) readings.Remove(id);
             foreach (var reading in values) { readings[reading.Id] = reading; history.Add(reading, DateTimeOffset.UtcNow); }
             if (preferences.Discover(values)) Save();
@@ -143,7 +146,7 @@ internal sealed class BarWindow : Window, IDisposable
             return reading;
         }
         return new(id, preferences.Indicators.FirstOrDefault(p => p.Id == id)?.Label ?? id, DateTimeOffset.UtcNow,
-            Unavailable: pending.Contains(id) || sensorsPending ? "Aguardando leitura" : id.StartsWith("gpu:", StringComparison.Ordinal) ? "GPU não encontrada nesta leitura" : "Fonte indisponível");
+            Unavailable: pending.Contains(id) || sensorsPending ? "Aguardando leitura" : Preferences.IsDevice(id) ? "Dispositivo não encontrado nesta leitura" : "Fonte indisponível");
     }
     private void Render()
     {
@@ -166,7 +169,7 @@ internal sealed class BarWindow : Window, IDisposable
         var panel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(3) };
         var missing = new List<IndicatorPreference>();
         double used = 6;
-        foreach (var pref in preferences.Indicators.Where(p => p.Enabled && (!p.Id.StartsWith("gpu:", StringComparison.Ordinal) || readings.ContainsKey(p.Id))))
+        foreach (var pref in preferences.Indicators.Where(p => p.Enabled && (!Preferences.IsDevice(p.Id) || readings.ContainsKey(p.Id))))
         {
             var reading = Current(pref.Id);
             var button = IndicatorButton(pref, reading);
@@ -201,11 +204,11 @@ internal sealed class BarWindow : Window, IDisposable
     private Button IndicatorButton(IndicatorPreference pref, Reading reading)
     {
         var lines = new StackPanel { Orientation = Orientation.Vertical };
-        var strings = Preferences.Providers.Contains(pref.Id) ? Presentation.QuotaLines(reading, preferences, DateTimeOffset.UtcNow) : [Presentation.Metric(reading, pref, preferences)];
+        var strings = Preferences.Providers.Contains(pref.Id) ? Presentation.QuotaLines(reading, preferences, DateTimeOffset.UtcNow) : Presentation.MetricLines(reading, pref, preferences);
         foreach (string text in strings) lines.Children.Add(new TextBlock { Text = text, FontSize = 11, TextTrimming = TextTrimming.None });
         var row = new StackPanel { Orientation = Orientation.Horizontal };
         if (reading.Id.StartsWith("gpu:", StringComparison.Ordinal)) row.Children.Add(GpuBrandMark.Create(reading, Foreground, compact: true));
-        row.Children.Add(new TextBlock { Text = pref.Label, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 7, 0), VerticalAlignment = VerticalAlignment.Center });
+        row.Children.Add(new TextBlock { Text = Presentation.Name(pref.Label, reading), FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 7, 0), VerticalAlignment = VerticalAlignment.Center });
         row.Children.Add(lines);
         var button = new Button { Content = row, Padding = new Thickness(9, 5, 9, 5), Margin = new Thickness(1, 0, 1, 0), Background = Background,
             Foreground = Foreground, BorderThickness = new Thickness(0), Focusable = false, Cursor = System.Windows.Input.Cursors.Hand,
@@ -229,6 +232,7 @@ internal sealed class BarWindow : Window, IDisposable
         AddToggle("Faixa fixa", preferences.Displays.BarEnabled, () => ToggleDisplay("bar"));
         AddToggle("Indicadores na bandeja", preferences.Displays.TrayEnabled, () => ToggleDisplay("tray"));
         AddToggle("Widget WidBar", preferences.Displays.WidgetEnabled, () => ToggleDisplay("widget"));
+        if (!isolated) AddToggle("Iniciar com o Windows", AutoStart.Enabled, ToggleAutoStart);
         menu.Items.Add(new Separator());
         Add("Sair", Quit);
         return menu;
@@ -260,7 +264,7 @@ internal sealed class BarWindow : Window, IDisposable
             }
             Tick();
             return saveError;
-        }, () => displayBridge.HasClient);
+        }, () => displayBridge.HasClient, id => readings.TryGetValue(id, out var r) && r.HardwareName is { Length: > 0 } hardware ? hardware : id == "memory" ? "Memória" : null);
         settings.Show();
     }
     private void OpenDetail(string id)
@@ -287,7 +291,7 @@ internal sealed class BarWindow : Window, IDisposable
     }
     private void UpdateDisplays()
     {
-        var values = preferences.Indicators.Where(p => !p.Id.StartsWith("gpu:", StringComparison.Ordinal) || readings.ContainsKey(p.Id))
+        var values = preferences.Indicators.Where(p => !Preferences.IsDevice(p.Id) || readings.ContainsKey(p.Id))
             .Select(p => Current(p.Id)).ToArray();
         indicatorTray.Update(preferences, values);
         Volatile.Write(ref displaySnapshot, Snapshot());
@@ -296,21 +300,33 @@ internal sealed class BarWindow : Window, IDisposable
     {
         var options = preferences.Displays;
         var indicators = options.WidgetEnabled ? preferences.Indicators.Where(p => p.Enabled &&
-            (!p.Id.StartsWith("gpu:", StringComparison.Ordinal) || readings.ContainsKey(p.Id))).Select(p =>
+            (!Preferences.IsDevice(p.Id) || readings.ContainsKey(p.Id))).Select(p =>
         {
             var reading = Current(p.Id);
-            return new DisplayIndicator(p.Id, p.Label, reading with { Source = "", Activity = "Atividade não informada pela fonte",
-                Unavailable = reading.Unavailable is null ? null : "Fonte indisponível" }, p.ShowTemperature);
+            return new DisplayIndicator(p.Id, Presentation.Name(p.Label, reading), reading with { Source = "", Activity = "Atividade não informada pela fonte",
+                Unavailable = reading.Unavailable is null ? null : "Fonte indisponível" }, p.ShowTemperature, p.ShowFreeSpace, p.ShowRates);
         }).ToArray() : [];
         return new DisplaySnapshot(1, DateTimeOffset.UtcNow, options.WidgetEnabled,
             new DisplayWidgetOptions(options.WidgetItemsPerPage, options.WidgetLayout, options.WidgetRotationSeconds,
                 options.WidgetRotate, options.WidgetWidth, options.WidgetPauseOnHover,
-                WidgetPaging.NormalizePlacements(options.WidgetPlacements), options.WidgetRowGap), Array.AsReadOnly(indicators),
+                WidgetPaging.NormalizePlacements(options.WidgetPlacements), options.WidgetRowGap, options.WidgetAlignment), Array.AsReadOnly(indicators),
             preferences.MemoryNominal, preferences.StackedQuotas, preferences.DetailedCountdown, preferences.ShowQuotaReset);
     }
     private void OnClosing(object? sender, CancelEventArgs e)
     {
         if (!exiting) { e.Cancel = true; preferences.Displays.BarEnabled = false; Save(); docking?.Release(); Hide(); }
+    }
+    // The tray takes the small-icon size for the current DPI from the multi-size embedded icon.
+    internal static System.Drawing.Icon AppIcon()
+    {
+        using var stream = typeof(BarWindow).Assembly.GetManifestResourceStream("NexoBar.ico");
+        return stream is null ? System.Drawing.SystemIcons.Application : new System.Drawing.Icon(stream, System.Windows.Forms.SystemInformation.SmallIconSize);
+    }
+    private static void ToggleAutoStart()
+    {
+        try { AutoStart.Set(!AutoStart.Enabled); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Runtime.InteropServices.COMException)
+        { System.Windows.MessageBox.Show(e.Message, "NexoBar · inicialização automática", MessageBoxButton.OK, MessageBoxImage.Warning); }
     }
     private void Quit() { exiting = true; Dispose(); Close(); Application.Current.Shutdown(); }
     public void Dispose()

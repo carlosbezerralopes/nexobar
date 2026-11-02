@@ -8,7 +8,10 @@ public sealed record PayloadFile(string Path, long Bytes, string Sha256);
 public sealed record InstallManifest(int SchemaVersion, string Version, string Architecture,
     string CompanionName, string CompanionPublisher, string CompanionVersion, List<PayloadFile> Files)
 {
-    public const string AppVersion = "0.6.1";
+    public const string AppVersion = "0.7.0";
+    // Each companion build carries its own revision (AppVersion.<revision>); the payload's exact version is the target,
+    // so a rebuilt widget with the same app version still replaces the installed one.
+    public static System.Version CompanionTarget { get; set; } = System.Version.Parse(AppVersion + ".0");
     public static InstallManifest Read(Stream stream)
     {
         var manifest = JsonSerializer.Deserialize<InstallManifest>(stream) ?? throw new InvalidDataException("Manifesto ausente.");
@@ -17,7 +20,8 @@ public sealed record InstallManifest(int SchemaVersion, string Version, string A
     public void Validate()
     {
         if (SchemaVersion != 1 || Version != AppVersion || Architecture != "x64" ||
-            CompanionName != "NexoBar.Widget" || CompanionPublisher != "CN=NexoBar" || CompanionVersion != "0.6.1.0" ||
+            CompanionName != "NexoBar.Widget" || CompanionPublisher != "CN=NexoBar" || !System.Version.TryParse(CompanionVersion, out var companion) || companion.Revision < 0 ||
+            new System.Version(companion.Major, companion.Minor, companion.Build) != System.Version.Parse(AppVersion) ||
             Files is null || Files.Count == 0 || Files.Count > 20000)
             throw new InvalidDataException("Manifesto incompatível.");
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

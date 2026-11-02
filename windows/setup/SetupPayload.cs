@@ -18,6 +18,7 @@ public sealed class SetupPayload : IDisposable
     {
         using var raw = Resource("NexoBar.Setup.Manifest.json"); using var bytes = new MemoryStream(); raw.CopyTo(bytes);
         ManifestHash = InstallManifest.Hash(bytes.ToArray()); bytes.Position = 0; Manifest = InstallManifest.Read(bytes);
+        InstallManifest.CompanionTarget = Version.Parse(Manifest.CompanionVersion);
         Directory = Path.Combine(Path.GetTempPath(), "NexoBar", "setup", Guid.NewGuid().ToString("N"));
         SafePaths.NoReparseParents(Directory); System.IO.Directory.CreateDirectory(Directory);
         try { using var zip = OpenArchive(); Manifest.ExtractVerified(zip, Directory, cancellationToken); }

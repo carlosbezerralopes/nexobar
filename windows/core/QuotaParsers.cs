@@ -118,7 +118,9 @@ public static partial class QuotaParsers
             double bonusUsed = double.Parse(bonus.Groups[1].Value, CultureInfo.InvariantCulture);
             windows.Add(new("bonus", "Bônus", bonusUsed / bonusLimit * 100, null, bonusUsed, bonusLimit, "créditos"));
         }
-        return new("kiro", "Kiro", now, Windows: windows, Percent: percent, Source: "Kiro CLI · /usage · utilizado");
+        var plan = Regex.Match(text, @"Estimated Usage\s*\|[^|\n]*\|\s*(?:KIRO\s+)?([^|\r\n]+)", RegexOptions.IgnoreCase);
+        return new("kiro", "Kiro", now, Windows: windows, Percent: percent, Source: "Kiro CLI · /usage · utilizado",
+            Plan: plan.Success ? Presentation.PlanName(plan.Groups[1].Value) : null);
     }
     private static double? Number(JsonElement root, string key) => root.ValueKind == JsonValueKind.Object && root.TryGetProperty(key, out var node) &&
         node.ValueKind == JsonValueKind.Number && node.TryGetDouble(out double value) && double.IsFinite(value) ? value : null;

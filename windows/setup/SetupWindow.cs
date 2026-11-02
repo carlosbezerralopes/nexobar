@@ -13,27 +13,29 @@ public sealed class SetupWindow : Window
 {
     readonly StackPanel body = new() { Margin = new Thickness(28) };
     readonly CheckBox bar = Choice("Faixa junto à barra de tarefas"), tray = Choice("Ícones por indicador na bandeja"), widget = Choice("Widget no WidBar");
-    readonly CheckBox autostart = Choice("Iniciar NexoBar ao entrar no Windows (opcional)");
+    readonly CheckBox autostart = Choice("Iniciar NexoBar ao entrar no Windows");
+    readonly CheckBox sensors = Choice("Temperaturas de CPU e SSD (instala o serviço NexoBar Sensores e o driver PawnIO; pede administrador uma única vez)");
     readonly TextBlock status = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 16, 0, 10) };
     readonly Button next = new() { Content = "Revisar instalação", Padding = new Thickness(16, 8, 16, 8), HorizontalAlignment = HorizontalAlignment.Left };
     readonly Button cancel = new() { Content = "Cancelar", Padding = new Thickness(16, 8, 16, 8), Margin = new Thickness(12, 0, 0, 0) };
     SetupPayload? payload; readonly PackageDeployment deployment = new(); WindowsInstallServices services = null!;
     InstallEnvironment environment = null!; InstallTransaction transaction = null!; byte[]? observed;
     bool autoChanged, running, reviewing, finished; CancellationTokenSource? cancellation; string? installedExe;
-    static CheckBox Choice(string label) => new() { Content = label, Margin = new Thickness(0, 7, 0, 7) };
+    static CheckBox Choice(string label) => new() { Content = new TextBlock { Text = label, TextWrapping = TextWrapping.Wrap }, Margin = new Thickness(0, 7, 0, 7) };
     public SetupWindow()
     {
-        Title = "Instalar NexoBar 0.6.1"; Width = 700; Height = 650; MinWidth = 600; MinHeight = 480; WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        Title = "Instalar NexoBar 0.7.0"; Width = 700; Height = 650; MinWidth = 600; MinHeight = 480; WindowStartupLocation = WindowStartupLocation.CenterScreen;
         Content = new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         body.Children.Add(new TextBlock { Text = "NexoBar", FontSize = 30, FontWeight = FontWeights.SemiBold });
         body.Children.Add(new TextBlock { Text = "Hardware e cotas à vista · Windows 11 x64", Margin = new Thickness(0, 4, 0, 18) });
-        foreach (var control in new[] { bar, tray, widget, autostart }) body.Children.Add(control);
+        foreach (var control in new[] { bar, tray, widget, autostart, sensors }) body.Children.Add(control);
+        sensors.IsChecked = true;
         var store = new Button { Content = "WidBar na Microsoft Store — informações e licença", HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 8) };
         store.Click += (_, _) => OpenUrl(PackageDeployment.StoreUrl); body.Children.Add(store);
         body.Children.Add(new TextBlock { Text = "WidBar é um produto separado. Ao selecionar Widget e instalar, você solicita a instalação do host oficial pela Store/winget, conforme os termos exibidos na Store. O companion NexoBar será instalado para seu usuário. Nenhuma consulta de IA será feita pelo instalador.", TextWrapping = TextWrapping.Wrap });
         body.Children.Add(status); var buttons = new StackPanel { Orientation = Orientation.Horizontal }; buttons.Children.Add(next); buttons.Children.Add(cancel); body.Children.Add(buttons);
         autostart.Click += (_, _) => autoChanged = true;
-        foreach (var choice in new[] { bar, tray, widget, autostart }) choice.Click += (_, _) => {
+        foreach (var choice in new[] { bar, tray, widget, autostart, sensors }) choice.Click += (_, _) => {
             if (reviewing) { reviewing = false; next.Content = "Revisar instalação"; status.Text = "Escolhas alteradas. Revise novamente antes de instalar."; }
         };
         next.Click += async (_, _) => { if (finished) { Close(); return; } if (!reviewing) Review(); else await Install(); };
@@ -69,20 +71,20 @@ public sealed class SetupWindow : Window
             }
         }
         catch (Exception e) when (e is System.Text.Json.JsonException or InvalidOperationException or FormatException) { }
-        autostart.IsChecked = File.Exists(environment.StartupShortcut); autoChanged = false;
+        // New installs start enabled; upgrades keep the user's choice and retarget an existing shortcut to the new version.
+        autostart.IsChecked = File.Exists(environment.StartupShortcut) || !File.Exists(environment.StatePath); autoChanged = autostart.IsChecked == true;
     }
     void Review()
     {
         try
         {
-            if (services.IsAppRunning()) throw new IOException("NexoBar está em execução. Use Sair no menu do aplicativo; depois clique Verificar novamente. Nenhum processo será encerrado.");
             if (!PreferencesPatch.Matches(environment.Preferences, observed)) { RefreshPreferences(); throw new IOException("As preferências mudaram e foram relidas. Confira as escolhas e revise novamente."); }
             var plan = transaction.Plan();
             if (plan.Kind is InstallKind.RefuseDowngrade or InstallKind.UnknownCollision or InstallKind.Repair) throw new IOException(plan.Message);
             using var cert = payload!.PublicCertificate();
             var signature = SignatureVerifier.Verify(payload.Companion, payload.Manifest.CompanionName, payload.Manifest.CompanionPublisher, payload.Manifest.CompanionVersion, cert);
             if (!signature.Integrity) throw new IOException("Falha na integridade do companion: " + signature.Detail);
-            status.Text = $"Destino: {plan.Target}\n{plan.Message}\nFaixa: {Yes(bar)} · Bandeja: {Yes(tray)} · Widget: {Yes(widget)}\nInicialização automática: {(autoChanged ? Yes(autostart) : "preservar opção atual")}\n{signature.Detail}\nO widget será adicionado manualmente pelo catálogo do WidBar.\nClique Instalar para confirmar as escolhas.";
+            status.Text = $"Destino: {plan.Target}\n{plan.Message}\nFaixa: {Yes(bar)} · Bandeja: {Yes(tray)} · Widget: {Yes(widget)}\nInicialização automática: {(autoChanged ? Yes(autostart) : "preservar opção atual")}\nTemperaturas de CPU e SSD: {Yes(sensors)}{(sensors.IsChecked == true ? " — o Windows pedirá administrador uma vez para instalar o serviço em Arquivos de Programas e o driver PawnIO (GPL-2.0, assinado por namazso.eu)" : "")}\n{signature.Detail}{(services.IsAppRunning() ? "\nO NexoBar em execução será fechado e reaberto ao final." : "")}\nSe o WidBar estiver usando o widget, ele será fechado e reaberto.\nClique Instalar para confirmar as escolhas.";
             reviewing = true; next.Content = "Instalar";
         }
         catch (Exception e) { status.Text = e.Message; next.Content = "Verificar novamente"; reviewing = false; }
@@ -110,23 +112,39 @@ public sealed class SetupWindow : Window
     async Task Install()
     {
         if (running) return; running = true; cancellation = new(); next.IsEnabled = false;
-        foreach (var c in new[] { bar, tray, widget, autostart }) c.IsEnabled = false;
+        foreach (var c in new[] { bar, tray, widget, autostart, sensors }) c.IsEnabled = false;
         try
         {
             if (widget.IsChecked == true) services.CompanionTrusted = await EnsureTrust();
             var options = new InstallOptions(bar.IsChecked == true, tray.IsChecked == true, widget.IsChecked == true, autoChanged ? autostart.IsChecked == true : null);
             var progress = new Progress<string>(message => status.Text = message);
+            status.Text = "Fechando o NexoBar em execução…";
+            bool reopen = await Task.Run(services.CloseApp);
             var result = await RunSta(() => transaction.ExecuteAsync(SetupPayload.OpenArchive, options, observed, cancellation.Token, progress));
             installedExe = result.Executable;
             status.Text = (result.Complete ? "Instalação concluída." : "Aplicativo instalado; há etapas pendentes.") + "\n" + string.Join("\n", result.Messages);
             if (widget.IsChecked == true) status.Text += "\nNo WidBar, abra o catálogo de widgets e adicione/arraste NexoBar para a barra desejada.";
+            if (sensors.IsChecked == true && result.Executable is not null) status.Text += "\n" + await InstallSensors();
+            if (reopen && installedExe is not null) { Process.Start(new ProcessStartInfo(installedExe) { UseShellExecute = true }); status.Text += "\nNexoBar reaberto na nova versão."; }
             AddLaunchButtons();
             if (result.Complete) { finished = true; next.Content = "Concluir"; }
             else { reviewing = false; next.Content = "Verificar novamente"; RefreshPreferences(); }
         }
         catch (OperationCanceledException) { status.Text = "Instalação cancelada antes de confirmar o aplicativo. Você pode verificar e retomar."; reviewing = false; next.Content = "Verificar novamente"; }
         catch (Exception e) { status.Text = e.Message; reviewing = false; next.Content = "Verificar novamente"; }
-        finally { running = false; next.IsEnabled = true; foreach (var c in new[] { bar, tray, widget, autostart }) c.IsEnabled = !finished; cancellation.Dispose(); cancellation = null; }
+        finally { running = false; next.IsEnabled = true; foreach (var c in new[] { bar, tray, widget, autostart, sensors }) c.IsEnabled = !finished; cancellation.Dispose(); cancellation = null; }
+    }
+    async Task<string> InstallSensors()
+    {
+        status.Text = "Instalando o serviço de sensores (o Windows pedirá administrador)…";
+        try
+        {
+            using var helper = Process.Start(new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = true, Verb = "runas", Arguments = SensorInstaller.Argument });
+            if (helper is null) return "Serviço de sensores não instalado.";
+            await helper.WaitForExitAsync();
+            return SensorInstaller.Message(helper.ExitCode);
+        }
+        catch (Win32Exception e) when (e.NativeErrorCode == 1223) { return "Administrador recusado: temperaturas de CPU e SSD ficam indisponíveis. Execute o instalador novamente para ativá-las."; }
     }
     bool launchAdded;
     static Task<T> RunSta<T>(Func<Task<T>> action)

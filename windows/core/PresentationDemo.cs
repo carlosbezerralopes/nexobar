@@ -10,6 +10,7 @@ public static class PresentationDemo
         if (id == "cpu") return new(id, label, now, Percent: 24, Temperature: 60, Source: "demonstrativo");
         if (id.StartsWith("gpu:", StringComparison.Ordinal)) return new(id, label, now, Percent: 42, Temperature: 65, Source: "demonstrativo");
         if (id == "memory") return new(id, label, now, Percent: 37.5, UsedBytes: 12UL << 30, TotalBytes: 32UL << 30, Source: "demonstrativo");
+        if (id.StartsWith("disk:", StringComparison.Ordinal)) return new(id, label, now, Percent: 4, Temperature: 44, UsedBytes: 404UL << 30, TotalBytes: 475UL << 30, Source: "demonstrativo", ReadRate: 1.2 * 1048576, WriteRate: 400 * 1024);
         QuotaWindow[] windows = id switch {
             "claude" => [new("session", "Sessão", 12, now.AddHours(2)), new("weekly_all", "Semana", 38, now.AddDays(3))],
             "codex" => [new("weekly", "Semana", 38, now.AddDays(3))],
@@ -23,6 +24,6 @@ public static class PresentationDemo
         var reading = Reading(item.Id, item.Label);
         return reading.Windows is not null ? Presentation.QuotaDisplayLines(reading, ReferenceTime,
             options.StackedQuotas, false, options.ShowQuotaReset, options.DetailedCountdown) :
-            [Presentation.Metric(reading, item, options)];
+            Presentation.MetricLines(reading, item, options);
     }
 }

@@ -13,6 +13,7 @@ public static class Program
         if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000) || System.Runtime.InteropServices.RuntimeInformation.OSArchitecture != System.Runtime.InteropServices.Architecture.X64)
         { MessageBox.Show("O instalador exige Windows 11 x64.", "NexoBar"); return 1; }
         if (args.SequenceEqual(new[] { "--trust-embedded-certificate" })) return TrustEmbeddedCertificate();
+        if (args.SequenceEqual(new[] { SensorInstaller.Argument })) return SensorInstaller.Run();
         if (args.SequenceEqual(new[] { "--verify-embedded-payload" }) || (args.Length == 2 && args[0] == "--verify-package"))
         {
             try

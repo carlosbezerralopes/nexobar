@@ -92,7 +92,7 @@ internal sealed class ClaudeConPty : IDisposable
             }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
             deadline.Token.ThrowIfCancellationRequested();
             if (Native.ResumeThread(thread) == uint.MaxValue) throw new Win32Exception();
-            var clock = Stopwatch.StartNew(); var protocol = new ClaudeUsageProtocol();
+            var clock = Stopwatch.StartNew(); var protocol = new ClaudeUsageProtocol(); string? plan = null;
             while (true)
             {
                 deadline.Token.ThrowIfCancellationRequested();
@@ -100,13 +100,14 @@ internal sealed class ClaudeConPty : IDisposable
                 lock (screenGate) { if (readFailure is not null) throw readFailure; frame = screen.Text; }
                 if (protocol.Observe(frame, clock.Elapsed))
                 {
+                    plan = ClaudeNativeUsage.Plan(frame);
                     lock (screenGate) screen.EraseContents(); // Pre-request status-line/frame quotas cannot be reused.
                     byte[] command = Encoding.UTF8.GetBytes("/usage\r");
                     if (!Native.WriteFile(input.Write, command, (uint)command.Length, out uint written, IntPtr.Zero) || written != command.Length) throw new IOException("Entrada Claude fechada");
                 }
                 else if (protocol.Ready(clock.Elapsed))
                 {
-                    try { return ClaudeNativeUsage.Parse(frame, DateTimeOffset.UtcNow); }
+                    try { return ClaudeNativeUsage.Parse(frame, DateTimeOffset.UtcNow) with { Plan = plan }; }
                     catch (FormatException) { /* A stable but incomplete composition can still be replaced. */ }
                 }
                 if (Native.WaitForSingleObject(process, 0) == 0) throw new IOException("Claude encerrou antes de informar cotas");

@@ -111,7 +111,9 @@ public static class ClaudeNativeUsage
         string lower = text.ToLowerInvariant();
         if (new[] { "not logged in", "please log in", "run /login", "login required", "sign in", "authentication", "unauthorized" }.Any(lower.Contains))
             throw new FormatException("Claude Code exige login; abra o cliente");
-        if (new[] { "do you trust", "trust this", "trust the files", "trust folder", "permission required", "choose the text style", "choose a theme", "select a theme", "let’s get started", "let's get started" }.Any(lower.Contains))
+        if (lower.Contains("permission required"))
+            throw new FormatException("Claude Code aguarda uma escolha de permissão; abra o cliente e responda");
+        if (new[] { "do you trust", "trust this", "trust the files", "trust folder", "choose the text style", "choose a theme", "select a theme", "let’s get started", "let's get started" }.Any(lower.Contains))
             throw new FormatException("Claude Code exige configuração ou confiança na pasta; abra o cliente");
         if (new[] { "failed to load", "error loading usage", "unable to load usage", "error fetching" }.Any(lower.Contains))
             throw new FormatException("Claude Code não conseguiu carregar as cotas");
@@ -119,8 +121,14 @@ public static class ClaudeNativeUsage
     public static bool InitialPrompt(string text)
     {
         RejectBlocked(text); string lower = text.ToLowerInvariant();
-        return lower.Contains("claude code") && new[] { "max", "pro", "claude.ai" }.Any(lower.Contains) &&
+        return lower.Contains("claude code") && new[] { "max", "pro", "ultra", "claude.ai" }.Any(lower.Contains) &&
             text.Split('\n').Any(line => line.Trim() is "❯" or "›" or "$" or ">");
+    }
+    // The startup header names the plan ("Opus 5.5 · Claude Ultra"); /usage itself does not repeat it.
+    public static string? Plan(string text)
+    {
+        var match = Regex.Match(text, @"·\s*Claude\s+([A-Za-z][A-Za-z ]{0,30}?)\s*$", RegexOptions.Multiline);
+        return match.Success ? Presentation.PlanName(match.Groups[1].Value) : null;
     }
     public static bool Loading(string text) => new[] { "refreshing", "loading usage", "fetching usage" }.Any(text.ToLowerInvariant().Contains);
     public static Reading Parse(string screen, DateTimeOffset now)
@@ -178,7 +186,7 @@ public static class ClaudeNativeUsage
         bool explicitYear = false;
         if (weekly)
         {
-            var date = Regex.Match(text, @"^([A-Za-z]+) ([0-9]{1,2})(?:,? ([0-9]{4}))? at (.+)$");
+            var date = Regex.Match(text, @"^([A-Za-z]+) ([0-9]{1,2})(?:,? ([0-9]{4}))?(?:,? at|,) (.+)$");
             if (!date.Success) return null;
             string[] months = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
             int month = Array.FindIndex(months, m => m == date.Groups[1].Value.ToLowerInvariant() || m[..3] == date.Groups[1].Value.ToLowerInvariant()) + 1;
