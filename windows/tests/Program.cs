@@ -180,6 +180,8 @@ catch (FormatException e) { Check(e.Message.Contains("escolha de permissão"), "
 Check(!ClaudeNativeUsage.InitialPrompt("Claude Code Max\nordinary model output"), "native command requires empty prompt");
 Check(!ClaudeNativeUsage.InitialPrompt("❯"), "native empty prompt requires client identity");
 Check(ClaudeNativeUsage.InitialPrompt("Claude Code v2.1.316\nOpus 5.5 · Claude Ultra\nbypass permissions on (shift+tab to cycle)\n$"), "native Ultra plan prompt recognized");
+Check(ClaudeNativeUsage.InitialPrompt("Claude Code v2.1.316\nOpus 5.5 with medium effort · Claude Team\n~\\workspace\n❯\nauto mode on (shift+tab to cycle)") && ClaudeNativeUsage.Plan("Opus 5.5 with medium effort · Claude Team") == "Team", "Team plan header recognized; any Claude plan name counts");
+Check(!ClaudeNativeUsage.InitialPrompt("Claude Code v2.1.316\nOpus 5.5 · API Usage Billing\n❯"), "header without a Claude plan does not trigger /usage");
 var protocol = new ClaudeUsageProtocol();
 Check(!protocol.Observe("Claude Code", TimeSpan.Zero), "native waits for initial reliable prompt");
 Check(protocol.Observe("Claude Code Max\n❯", TimeSpan.FromSeconds(1)), "native submits usage once");

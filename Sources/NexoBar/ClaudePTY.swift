@@ -123,7 +123,10 @@ enum ClaudePTY {
 
     private static func isInitialPrompt(_ text: String) -> Bool {
         let lower = text.lowercased()
-        guard lower.contains("claude code"), lower.contains("max") || lower.contains("pro") || lower.contains("ultra") || lower.contains("claude.ai") else { return false }
+        // Any "· Claude <plan>" header counts (Team, Enterprise...): a fixed plan list left Team waiting forever.
+        let planHeader = (try? NSRegularExpression(pattern: #"·\s*Claude\s+[A-Za-z][A-Za-z ]{0,30}?\s*$"#, options: .anchorsMatchLines))?
+            .firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
+        guard lower.contains("claude code"), planHeader || lower.contains("max") || lower.contains("pro") || lower.contains("ultra") || lower.contains("claude.ai") else { return false }
         return text.split(separator: "\n", omittingEmptySubsequences: false).contains { line in
             let prompt = line.trimmingCharacters(in: .whitespacesAndNewlines)
             return ["❯", "›", "$", ">"].contains(prompt)

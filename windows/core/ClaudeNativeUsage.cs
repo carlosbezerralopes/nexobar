@@ -121,7 +121,8 @@ public static class ClaudeNativeUsage
     public static bool InitialPrompt(string text)
     {
         RejectBlocked(text); string lower = text.ToLowerInvariant();
-        return lower.Contains("claude code") && new[] { "max", "pro", "ultra", "claude.ai" }.Any(lower.Contains) &&
+        // Any "· Claude <plan>" header counts (Pro, Max, Ultra, Team, Enterprise...): a fixed plan list left Team waiting forever.
+        return lower.Contains("claude code") && (Plan(text) is not null || new[] { "max", "pro", "ultra", "claude.ai" }.Any(lower.Contains)) &&
             text.Split('\n').Any(line => line.Trim() is "❯" or "›" or "$" or ">");
     }
     // The startup header names the plan ("Opus 5.5 · Claude Ultra"); /usage itself does not repeat it.
