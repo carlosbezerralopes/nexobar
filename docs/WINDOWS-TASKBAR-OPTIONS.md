@@ -29,7 +29,7 @@ Um slot de aproximadamente 160–220 pixels lógicos, altura igual à área disp
 
 ```text
 CPU     28%  61°
-RAM     40/48 GiB
+RAM     40/48 GB
 NVIDIA  52%  65°
 AMD     12%  48°
 Claude  40% · 2h | 42% · 3d

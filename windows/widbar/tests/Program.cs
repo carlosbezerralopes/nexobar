@@ -158,12 +158,12 @@ foreach (bool reset in new[] {false, true})
 foreach (bool stacked in new[] {false, true})
 {
     var instance = inherited.With(null, names);
-    string[] expected = ["12%" + (reset ? " · 3h0m" : ""), "38%" + (reset ? " · 2d0h" : "")];
+    string[] expected = ["12%" + (reset ? "\u2009·\u20093h0m" : ""), "38%" + (reset ? "\u2009·\u20092d0h" : "")];
     Check(instance.PreviewQuotaLines(twoWindows, previewNow, true, stacked, reset)
         .SequenceEqual(stacked ? expected : [string.Join("  |  ", expected)]),
         $"preview matrix names={names} reset={reset} stacked={stacked}");
     Check(instance.PreviewQuotaLines(weeklyOnly, previewNow, true, stacked, reset)
-        .SequenceEqual(new[] {"38%" + (reset ? " · 2d0h" : "")}), "weekly-only preview has one real line " + names + reset + stacked);
+        .SequenceEqual(new[] {"38%" + (reset ? "\u2009·\u20092d0h" : "")}), "weekly-only preview has one real line " + names + reset + stacked);
 }
 Check(inherited.PreviewQuotaValues(twoWindows, previewNow, true).SequenceEqual(firstInstance.PreviewQuotaValues(twoWindows, previewNow, true)),
     "legacy adapter reset is independent of names");
@@ -205,7 +205,7 @@ foreach (string id in new[] { "cpu", "gpu:fixture-a", "gpu:fixture-b" })
     var off = PresentationDemo.Lines(new(id, id, true, false), demoPrefs).Single();
     Check(on.Contains(id == "cpu" ? "60°C" : "65°C") && !off.Contains("°C"), "demo temperature follows preference " + id);
 }
-Check(PresentationDemo.Lines(new("memory", "Memória"), demoPrefs).Single() == "12/32 GiB", "demo nominal memory fixture");
+Check(PresentationDemo.Lines(new("memory", "Memória"), demoPrefs).Single() == "12/32 GB", "demo nominal memory fixture");
 demoPrefs.MemoryNominal = false;
 Check(PresentationDemo.Lines(new("memory", "Memória"), demoPrefs).Single() == Presentation.Percent(37.5), "demo memory percentage follows option");
 demoPrefs.ShowQuotaReset = false;

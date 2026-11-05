@@ -33,7 +33,7 @@ public sealed class MainPlugin : WidgetPluginBase, IConfigurableWidgetPlugin, IW
     private DateTimeOffset lastRotation = DateTimeOffset.UtcNow;
     public override string Id => "com.nexobar.indicators";
     public override string Name => "NexoBar";
-    public override string Version => "0.6.1";
+    public override string Version => "0.7.0";
     public override int PreviewLogicalWidth => instanceSettings.EffectiveWidth(snapshot?.WidgetOptions.Width ?? settingsVisualOptions?.WidgetOptions.Width);
     public override int FlyoutWidth => 390;
     public override int FlyoutHeight => 420;
@@ -292,7 +292,7 @@ public sealed class MainPlugin : WidgetPluginBase, IConfigurableWidgetPlugin, IW
         }
         else
         {
-            detail.Children.Add(Text(Presentation.Metric(reading, new(item.Id, item.Label, true, true), PresentationOptions()), 20));
+            foreach (string line in Presentation.MetricLines(reading, new(item.Id, item.Label, true, true), PresentationOptions())) detail.Children.Add(Text(line, 20));
             if (reading.UsedBytes is not null || reading.TotalBytes is not null)
                 detail.Children.Add(Text(Presentation.Bytes(reading.UsedBytes) + " / " + Presentation.Bytes(reading.TotalBytes)));
         }

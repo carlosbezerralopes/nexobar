@@ -32,6 +32,7 @@ internal static class IndicatorIcon
             double[][] points = id == "memory" ? [[1, 4, 15, 4, 15, 12, 1, 12], [3, 6, 5, 6, 5, 10, 3, 10], [7, 6, 9, 6, 9, 10, 7, 10], [11, 6, 13, 6, 13, 10, 11, 10]] :
                 id == "cpu" ? [[2, 2, 14, 2, 14, 14, 2, 14], [5, 5, 11, 5, 11, 11, 5, 11]] :
                 id.StartsWith("gpu:", StringComparison.Ordinal) ? [[0, 3, 15, 3, 15, 12, 0, 12], [3, 5, 10, 5, 10, 10, 3, 10], [2, 12, 4, 12, 4, 15, 2, 15]] :
+                id.StartsWith("disk:", StringComparison.Ordinal) ? [[1, 4, 15, 4, 15, 12, 1, 12], [3, 7, 9, 7, 9, 9, 3, 9], [11, 7, 13, 7, 13, 9, 11, 9]] :
                 [[8, 0, 16, 8, 8, 16, 0, 8], [8, 4, 12, 8, 8, 12, 4, 8]];
             foreach (var loop in points)
             {

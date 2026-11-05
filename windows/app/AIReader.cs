@@ -16,7 +16,7 @@ internal sealed class AIReader(Preferences preferences) : IDisposable
             {
                 "claude" => await claude.Read(preferences.ClaudeWorkingDirectory, cancellation),
                 "codex" => QuotaParsers.Codex(await command.Run("codex", ["app-server"], true, cancellation, preferences.CodexWorkingDirectory), now),
-                "kiro" => QuotaParsers.Kiro(await command.Run("kiro-cli", ["chat", "--no-interactive", "/usage"], false, cancellation), now),
+                "kiro" => QuotaParsers.Kiro(await command.Run("kiro-cli", ["chat", "--agent-engine", "v2", "--no-interactive", "/usage"], false, cancellation), now),
                 "copilot" => QuotaParsers.Copilot(await command.Run("gh", ["api", "--hostname", "github.com", "copilot_internal/user"], false, cancellation), now),
                 _ => Unavailable(id, now, "Interface de sessão segura não validada no Windows")
             };

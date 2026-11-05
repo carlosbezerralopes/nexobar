@@ -62,6 +62,41 @@ var kiro = QuotaParsers.Kiro("Credits\n████░░ 22% (11 of 50 covered)
 Check(kiro.Percent == 22 && kiro.Windows is { Count: 2 } && kiro.Windows[0].Limit == 50, "Kiro own usage and bonus preserved");
 Check(QuotaParsers.Kiro("░░ 0% resets on 1/2", now).Windows![0].ResetsAt?.Year == 2027, "Kiro next-year reset MM/DD");
 Reject(() => QuotaParsers.Kiro("login required ███ 20%", now), "Kiro auth failure rejected");
+var sensorNow = DateTimeOffset.UtcNow;
+var sensorJson = SensorProtocol.Serialize(new(1, sensorNow, 71.5, [new(0, "ADATA SM2P41D3", 44), new(1, "\u0007HD", 900)]));
+var sensorSnapshot = SensorProtocol.Parse(sensorJson, sensorNow);
+Check(sensorSnapshot is { CpuTemperature: 71.5 } && sensorSnapshot.Disks[0].Temperature == 44 && sensorSnapshot.Disks[1].Temperature is null && sensorSnapshot.Disks[1].Name == "HD", "sensor snapshot sanitized: out-of-range temperature and control chars dropped");
+Check(SensorProtocol.Parse(sensorJson, sensorNow.AddMinutes(1)) is null && SensorProtocol.Parse("{\"SchemaVersion\":2}", sensorNow) is null && SensorProtocol.Parse("not json", sensorNow) is null, "sensor snapshot stale/unknown/invalid refused");
+var activity = DiskCounters.Delta(new(1000, 2000, 0, 0), new(1000 + 3 * 1048576, 2000 + 1048576, 8_000_000, 10_000_000))!;
+Check(Math.Abs(activity.ActivePercent - 20) < 1e-9 && Math.Abs(activity.ReadRate - 3 * 1048576) < 1 && Math.Abs(activity.WriteRate - 1048576) < 1, "disk active time and read/write rates from counters");
+Check(DiskCounters.Delta(new(5, 5, 5, 10), new(4, 5, 5, 20)) is null && DiskCounters.Delta(new(0, 0, 0, 10), new(0, 0, 0, 10)) is null, "disk counter reset or zero interval refused");
+var disks = DiskReadings.Build([new(0, 400, 100), new(0, 100, 50)], new Dictionary<int, bool?> { [0] = true }, sensorSnapshot, sensorNow, new Dictionary<int, DiskActivity> { [0] = activity });
+Check(disks.Count == 1 && disks[0].Id == "disk:0" && disks[0].Name == "SSD" && Math.Abs(disks[0].Percent!.Value - 20) < 1e-9 && disks[0].UsedBytes == 350 && disks[0].TotalBytes == 500 && disks[0].Temperature == 44 && disks[0].HardwareName == "ADATA SM2P41D3", "disk activity, capacity and service temperature");
+var ssd = disks[0] with { UsedBytes = 404UL << 30, TotalBytes = 475UL << 30 };
+Check(Presentation.Metric(ssd, new("disk:0", "SSD"), new()) == "20%\u2009·\u200944°C\u2009·\u200971 GB livre", "disk default: active time, temperature, compact free space; rates off");
+string diskLine = Presentation.Metric(ssd, new("disk:0", "SSD", ShowRates: true), new());
+Check(diskLine.StartsWith("20%") && diskLine.Contains("L 3") && diskLine.Contains("E 1") && diskLine.Contains("MB/s\u2009·\u200944°C"), "read/write rates only when enabled");
+Check(!Presentation.Metric(ssd, new("disk:0", "SSD", ShowFreeSpace: false), new()).Contains("livre") && Presentation.Rates(300 * 1024, 20 * 1024) == "L 300 E 20 KB/s", "free space flag off; small rates in KB/s");
+Check(Presentation.Metric(new("memory", "RAM", now, 70, UsedBytes: (ulong)(22.4 * 1073741824), TotalBytes: (ulong)(31.7 * 1073741824)), new("memory", "RAM"), prefs) == (22.4).ToString("0.#") + "/32 GB", "memory total rounded to whole GB to fit the top row");
+Check(Presentation.Size(512UL * 1048576) == "512 MB" && Presentation.Size(64UL * 1073741824) == "64 GB" && Presentation.Size(1536UL * 1073741824) == (1.5).ToString("0.#") + " TB", "free space uses whole unit names");
+Check(DiskReadings.Build([new(0, 100, 10)], new Dictionary<int, bool?>(), null, sensorNow)[0].Percent is null, "disk activity absent before second sample, never zero");
+var discovered = new Preferences();
+discovered.Discover([new("gpu:/gpu-intel-integrated/1", "Intel(R) Graphics", sensorNow), new("gpu:/gpu-nvidia/0", "NVIDIA GeForce RTX 3050", sensorNow), new("disk:0", "SSD", sensorNow)]);
+Check(discovered.Indicators.Take(5).Select(p => p.Label).SequenceEqual(["CPU", "GPU integrada", "GPU", "SSD", "RAM"]) && !discovered.Indicators.First(p => p.Label == "GPU integrada").Enabled && discovered.Indicators.First(p => p.Label == "GPU").Enabled, "short default names in CPU · GPU · SSD · RAM order; integrated GPU off beside a discrete one");
+var placementsDefault = new DisplayOptions(); placementsDefault.UseHardwareAgentsPreset(["gpu:/gpu-nvidia/0", "disk:0"]);
+Check(placementsDefault.WidgetPlacements.Where(p => p.Row == 0).OrderBy(p => p.Order).Select(p => p.Id).SequenceEqual(["cpu", "gpu:/gpu-nvidia/0", "disk:0", "memory"]) &&
+    placementsDefault.WidgetPlacements.Where(p => p.Row == 1).OrderBy(p => p.Order).Select(p => p.Id).SequenceEqual(["claude", "codex", "kiro"]), "preset rows CPU · GPU · SSD · RAM and Claude · Codex · Kiro");
+placementsDefault.EnsurePlacements(["disk:1"]);
+Check(placementsDefault.WidgetPlacements.Where(p => p.Row == 0).OrderBy(p => p.Order).Select(p => p.Id).SequenceEqual(["cpu", "gpu:/gpu-nvidia/0", "disk:0", "disk:1", "memory"]), "new device joins before RAM");
+Check(new DisplayOptions().WidgetAlignment == "left" && WidgetPaging.NormalizeAlignment("right") == "right" && WidgetPaging.NormalizeAlignment("diagonal") == "left", "widget alignment defaults to left");
+var twoDisks = DiskReadings.Build([new(0, 100, 10), new(2, 100, 90)], new Dictionary<int, bool?> { [2] = false }, null, sensorNow);
+Check(twoDisks.Select(d => d.Name).SequenceEqual(["Disco 0", "HD 2"]) && twoDisks.All(d => d.Temperature is null), "disks without service have usage and no invented temperature");
+Check(Preferences.IsDevice("disk:0") && Preferences.IsDevice("gpu:/x") && !Preferences.IsDevice("cpu"), "disks and GPUs are discovered devices");
+var kiroPlan =QuotaParsers.Kiro("Estimated Usage | resets on 2026-12-01 | KIRO PRO MAX\nCredits (541.87 of 5000 covered in plan), 10.8%", now);
+Check(kiroPlan.Plan == "Pro Max" && kiroPlan.Windows![0].ResetsAt == new DateTimeOffset(2026, 12, 1, 0, 0, 0, TimeSpan.Zero) && Math.Abs(kiroPlan.Percent!.Value - 10.8374) < 0.01 && Presentation.Name("Kiro", kiroPlan) == "Kiro Pro Max", "Kiro plan from usage header");
+Check(QuotaParsers.Kiro("Credits\n████░░ 22% (11 of 50 covered)", now).Plan is null && Presentation.Name("Kiro", kiroPlan with { Plan = null }) == "Kiro", "Kiro absent plan keeps label");
+Check(ClaudeNativeUsage.Plan("Claude Code v2.1.316\nOpus 5.5 · Claude Ultra\n~\\workspace") == "Ultra" && ClaudeNativeUsage.Plan("Claude Code\nSonnet 5.5 · Claude Max") == "Max", "Claude plan from startup header");
+Check(ClaudeNativeUsage.Plan("Claude Code\nOpus 5.5 · API Usage Billing") is null, "Claude non-plan header ignored");
 Reject(() => QuotaParsers.Kiro("some unrelated 40%", now), "Kiro arbitrary model text not quota");
 Check(Presentation.Countdown(now.AddHours(2).AddMinutes(13), now, false) == "2h", "compact hours");
 Check(Presentation.Countdown(now.AddHours(2).AddMinutes(13), now, true) == "2h13m", "detailed hours");
@@ -72,7 +107,7 @@ Check(Presentation.Percent(null) == "—" && Presentation.Percent(0) == "0%", "u
 Check(Presentation.Percent(0.4) == "<1%" && Presentation.Percent(0.999) == "<1%", "positive fractions never display zero");
 Check(Presentation.Percent(99.9) == "99%" && Presentation.Percent(100) == "100%", "only actual 100 displays full usage");
 Check(Presentation.Percent(-1) == "—", "negative percentage unavailable");
-Check(Presentation.Metric(new("memory", "Memória", now, 40d/48*100, UsedBytes: 40UL*1073741824, TotalBytes:48UL*1073741824), new("memory", "Memória"), prefs) == "40/48 GiB", "nominal memory compact unit");
+Check(Presentation.Metric(new("memory", "Memória", now, 40d/48*100, UsedBytes: 40UL*1073741824, TotalBytes:48UL*1073741824), new("memory", "Memória"), prefs) == "40/48 GB", "nominal memory compact unit");
 var gpus = new[] { new Reading("gpu:/gpu-intel/0", "Intel UHD", now, 5, 45, Vendor: GpuVendor.Intel), new Reading("gpu:/gpu-nvidia/0", "RTX 4080", now, 83, 72, Vendor: GpuVendor.Nvidia) };
 Check(GpuBrand.Wordmark(gpus[0].Vendor) == "intel" && GpuBrand.Wordmark(gpus[1].Vendor) == "NVIDIA", "GPU manufacturer wordmarks from explicit vendor identity");
 Check(GpuBrand.Wordmark(GpuVendor.Amd) == "AMD", "AMD wordmark");
@@ -123,6 +158,9 @@ Check(Preferences.SafeLabel("\nRTX\t4080", "gpu") == "RTX4080", "labels strip co
 
 // Native /usage fixtures: no client installation, session, credential, or Windows API needed.
 string nativeWeekly = "Current week (all models)\r\n0% used\r\nResets Oct 24 at 9am (America/Fortaleza)";
+var ultraNow = new DateTimeOffset(2026, 11, 2, 12, 0, 0, TimeSpan.FromHours(-3));
+var ultra = ClaudeNativeUsage.Parse("Current week (all models)\n34% 34% used\nResets Nov 4, 1pm (America/Sao_Paulo)\nCurrent week (Fable)\n0% 0% used\nResets Nov 4, 1pm (America/Sao_Paulo)", ultraNow);
+Check(ultra.Windows!.All(w => w.ResetsAt == new DateTimeOffset(2026, 11, 4, 13, 0, 0, TimeSpan.FromHours(-3))) && ultra.Percent == 34, "native comma reset without at (2.1.316)");
 var native = ClaudeNativeUsage.Parse(nativeWeekly, now);
 Check(native.Windows is { Count: 1 } && native.Percent == 0 && native.Windows[0].Id == "weekly_all", "native weekly only explicit zero");
 Check(native.Windows![0].ResetsAt == DateTimeOffset.Parse("2026-10-24T12:00:00Z"), "native IANA Fortaleza reset");
@@ -137,8 +175,13 @@ Check(ClaudeNativeUsage.Parse("Current session\n12% 12% used", now).Percent == 1
 Reject(() => ClaudeNativeUsage.Parse(nativeWeekly + "\n" + nativeWeekly, now), "native duplicate section refused");
 foreach (string blocked in new[] { "Refreshing...", "Loading usage data", "Failed to load usage", "Error loading usage", "please log in", "run /login", "do you trust this folder", "choose a theme", "let’s get started" })
     Reject(() => ClaudeNativeUsage.Parse(nativeWeekly + "\n" + blocked, now), "native blocked screen " + blocked);
+try { ClaudeNativeUsage.RejectBlocked("Permission Required: Make auto mode your default permission mode?"); Check(false, "native permission choice rejected"); }
+catch (FormatException e) { Check(e.Message.Contains("escolha de permissão"), "native permission choice is not reported as folder trust"); }
 Check(!ClaudeNativeUsage.InitialPrompt("Claude Code Max\nordinary model output"), "native command requires empty prompt");
 Check(!ClaudeNativeUsage.InitialPrompt("❯"), "native empty prompt requires client identity");
+Check(ClaudeNativeUsage.InitialPrompt("Claude Code v2.1.316\nOpus 5.5 · Claude Ultra\nbypass permissions on (shift+tab to cycle)\n$"), "native Ultra plan prompt recognized");
+Check(ClaudeNativeUsage.InitialPrompt("Claude Code v2.1.316\nOpus 5.5 with medium effort · Claude Team\n~\\workspace\n❯\nauto mode on (shift+tab to cycle)") && ClaudeNativeUsage.Plan("Opus 5.5 with medium effort · Claude Team") == "Team", "Team plan header recognized; any Claude plan name counts");
+Check(!ClaudeNativeUsage.InitialPrompt("Claude Code v2.1.316\nOpus 5.5 · API Usage Billing\n❯"), "header without a Claude plan does not trigger /usage");
 var protocol = new ClaudeUsageProtocol();
 Check(!protocol.Observe("Claude Code", TimeSpan.Zero), "native waits for initial reliable prompt");
 Check(protocol.Observe("Claude Code Max\n❯", TimeSpan.FromSeconds(1)), "native submits usage once");
@@ -299,7 +342,7 @@ foreach (bool reset in new[] { false, true })
 foreach (bool stacked in new[] { false, true })
 {
     var result = Presentation.QuotaDisplayLines(contractReading, now, stacked, labels, reset, true);
-    string[] expected = [(labels ? "Sessão " : "") + "0%" + (reset ? " · 3h0m" : ""),
+    string[] expected = [(labels ? "Sessão " : "") + "0%" + (reset ? "\u2009·\u20093h0m" : ""),
         (labels ? "Semanal " : "") + "38%"];
     Check(result.SequenceEqual(stacked ? expected : [string.Join("  |  ", expected)]),
         $"quota matrix labels={labels} reset={reset} stacked={stacked}");
@@ -320,7 +363,7 @@ Check(Presentation.QuotaDisplayLines(contractReading with { Windows = [new("week
 Check(Presentation.QuotaDisplayLines(contractReading with { Unavailable = "failure" }, now, true, false, true, true)
     .SequenceEqual(new[] { "—" }), "unavailable ignores numbers and resets");
 Check(Presentation.QuotaDisplayLines(contractReading with { Windows = [new("session", "Sessão", 0, now)] },
-    now, true, false, true, true).SequenceEqual(new[] { "0% · aguardando confirmação" }), "expired reset never claims renewal");
+    now, true, false, true, true).SequenceEqual(new[] { "0%\u2009·\u2009aguardando confirmação" }), "expired reset never claims renewal");
 const string oldProfile = """
 {"SchemaVersion":1,"MonitorId":"monitor-fixture","ClaudeWorkingDirectory":"C:/fixture/claude","CodexWorkingDirectory":"C:/fixture/codex",
  "MemoryNominal":false,"StackedQuotas":true,"DetailedCountdown":true,"ResetAlerts":true,

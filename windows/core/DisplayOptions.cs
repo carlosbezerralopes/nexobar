@@ -17,6 +17,7 @@ public sealed class DisplayOptions
     public bool WidgetRotate { get; set; } = true;
     public int WidgetWidth { get; set; } = 320;
     public int WidgetRowGap { get; set; } = 4;
+    public string WidgetAlignment { get; set; } = "left";
     public bool WidgetPauseOnHover { get; set; } = true;
     public List<WidgetPlacement> WidgetPlacements { get; set; } = [];
     public void Normalize()
@@ -27,6 +28,7 @@ public sealed class DisplayOptions
         WidgetRotationSeconds = Math.Clamp(WidgetRotationSeconds, 2, 60);
         WidgetWidth = Math.Clamp(WidgetWidth, 120, 600);
         WidgetRowGap = Math.Clamp(WidgetRowGap, 0, 12);
+        WidgetAlignment = WidgetPaging.NormalizeAlignment(WidgetAlignment);
         WidgetPlacements = WidgetPaging.NormalizePlacements(WidgetPlacements).ToList();
     }
 
@@ -42,18 +44,28 @@ public sealed class DisplayOptions
     public void EnsurePlacements(IReadOnlyList<string> ids)
     {
         Normalize();
-        int order = WidgetPlacements.Count(x => x.Row == 0);
         foreach (string id in ids)
-            if (!WidgetPlacements.Any(x => x.Id == id)) WidgetPlacements.Add(new(id, 0, order++));
+        {
+            if (WidgetPlacements.Any(x => x.Id == id)) continue;
+            // New devices join the hardware row before RAM; anything else goes to the end of the first row.
+            var memory = WidgetPlacements.FirstOrDefault(x => x.Id == "memory" && x.Row == 0);
+            if (Preferences.IsDevice(id) && memory is not null)
+            {
+                WidgetPlacements = WidgetPlacements.Select(x => x.Row == 0 && x.Order >= memory.Order ? x with { Order = x.Order + 1 } : x).ToList();
+                WidgetPlacements.Add(new(id, 0, memory.Order));
+            }
+            else WidgetPlacements.Add(new(id, 0, WidgetPlacements.Where(x => x.Row == 0).Select(x => x.Order + 1).DefaultIfEmpty(0).Max()));
+        }
         Normalize();
     }
-    public void UseHardwareAgentsPreset()
+    // Hardware row: CPU · devices (GPU, SSD) · RAM; agents row: Claude · Codex · Kiro.
+    public void UseHardwareAgentsPreset(IReadOnlyList<string>? devices = null)
     {
         Normalize();
-        string[] ids = ["cpu", "memory", "claude", "codex", "kiro"];
-        var preset = ids.Select((id, i) => new WidgetPlacement(id, i < 2 ? 0 : 1, i < 2 ? i : i - 2)).ToList();
-        preset.AddRange(WidgetPlacements.Where(x => !ids.Contains(x.Id)).Select(x => x with { Order = x.Order + 5 }));
-        WidgetPlacements = preset; WidgetItemsPerPage = 5; WidgetLayout = "customRows"; Normalize();
+        string[] hardware = ["cpu", .. devices ?? [], "memory"], agents = ["claude", "codex", "kiro"];
+        var preset = hardware.Select((id, i) => new WidgetPlacement(id, 0, i)).Concat(agents.Select((id, i) => new WidgetPlacement(id, 1, i))).ToList();
+        preset.AddRange(WidgetPlacements.Where(x => !hardware.Contains(x.Id) && !agents.Contains(x.Id)).Select(x => x with { Order = x.Order + 8 }));
+        WidgetPlacements = preset; WidgetItemsPerPage = Math.Min(8, hardware.Length + agents.Length); WidgetLayout = "customRows"; Normalize();
     }
     public void MoveWidget(string id, int direction, IReadOnlyList<string> enabledIds)
     {
@@ -82,6 +94,7 @@ public sealed class DisplayOptions
 public static class WidgetPaging
 {
     public static string NormalizeLayout(string? layout) => layout is "twoRows" or "customRows" ? layout : "horizontal";
+    public static string NormalizeAlignment(string? alignment) => alignment is "center" or "right" ? alignment : "left";
     public static bool ValidId(string? id) => !string.IsNullOrWhiteSpace(id) && id.Length <= 256 && !id.Any(char.IsControl);
     public static IReadOnlyList<WidgetPlacement> NormalizePlacements(IEnumerable<WidgetPlacement>? placements)
     {

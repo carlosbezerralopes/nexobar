@@ -20,7 +20,7 @@ internal sealed class IndicatorTray(Action<string> detail, Action settings, Acti
     internal void Update(Preferences preferences, IReadOnlyList<Reading> readings)
     {
         var enabled = preferences.Displays.TrayEnabled ? preferences.Indicators.Where(p => p.Enabled &&
-            (!p.Id.StartsWith("gpu:", StringComparison.Ordinal) || readings.Any(r => r.Id == p.Id))).ToArray() : [];
+            (!Preferences.IsDevice(p.Id) || readings.Any(r => r.Id == p.Id))).ToArray() : [];
         var ids = enabled.Select(p => p.Id).ToHashSet(StringComparer.Ordinal);
         foreach (string id in entries.Keys.Where(id => !ids.Contains(id)).ToArray()) { entries[id].Dispose(); entries.Remove(id); }
         bool light = DesktopIntegration.LightTheme();
@@ -57,8 +57,8 @@ internal sealed class IndicatorTray(Action<string> detail, Action settings, Acti
     private static string Tooltip(IndicatorPreference pref, Reading reading, Preferences preferences)
     {
         string value = reading.Unavailable ?? (Preferences.Providers.Contains(pref.Id) ?
-            string.Join(" | ", Presentation.QuotaLines(reading, preferences, DateTimeOffset.UtcNow)) : Presentation.Metric(reading, pref, preferences));
-        string label = pref.Label;
+            string.Join(" | ", Presentation.QuotaLines(reading, preferences, DateTimeOffset.UtcNow)) : string.Join(" · ", Presentation.MetricLines(reading, pref, preferences)));
+        string label = Presentation.Name(pref.Label, reading);
         if (pref.Id.StartsWith("gpu:", StringComparison.Ordinal) && GpuBrand.Wordmark(reading.Vendor) is { } brand &&
             !label.Contains(brand, StringComparison.OrdinalIgnoreCase)) label += " (" + brand + ")";
         string text = new((label + " · " + value).Where(c => !char.IsControl(c)).ToArray());

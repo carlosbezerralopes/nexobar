@@ -17,7 +17,7 @@ Indicadores de hardware e limites de uso em uma barra compacta, com interface em
 - **CPU, memória, GPU e temperaturas**, quando a plataforma e os sensores fornecem a leitura.
 - **Cotas de IA e horários de renovação** informados pelos clientes compatíveis. Uma janela semanal aparece sozinha quando não existe uma janela de sessão.
 - **Detalhes por indicador**, com gráficos de hardware dos últimos cinco minutos mantidos somente em memória.
-- **Uma barra do seu jeito:** ordem, nomes, visibilidade, estilos, memória em GiB ou percentual e cotas em uma ou duas linhas.
+- **Uma barra do seu jeito:** ordem, nomes, visibilidade, estilos, memória em GB ou percentual e cotas em uma ou duas linhas.
 
 Uma leitura ausente aparece como indisponível. O NexoBar não transforma ausência em zero nem usa consumo de CPU/GPU para inferir a atividade de uma tarefa de IA. Um contador que chegou a zero também não confirma que a cota foi renovada.
 
@@ -52,7 +52,7 @@ Use um pacote preview somente quando ele estiver disponível junto à versão co
 |---|---|
 | `NexoBar-macOS-preview.zip` | Extraia e abra `NexoBar.app`. O pacote atual é arm64. A assinatura é local, sem notarização Apple. |
 | `NexoBar-Windows-x64-0.6.1-preview.zip` | Extraia para uma pasta local e abra `NexoBar.exe`. O runtime .NET é incluído. O kit-fonte do WidBar é separado do executável portátil. |
-| `NexoBar-Setup-x64.exe` | Instalador de arquivo único com runtime incluído. Abra, escolha faixa/bandeja/WidBar, revise o destino e confirme. Autostart é opcional. A validação da instalação 0.6 é separada do teste anterior 0.5. |
+| `NexoBar-Setup-x64.exe` | Instalador de arquivo único com runtime incluído. Abra, escolha faixa/bandeja/WidBar, revise o destino e confirme. A inicialização automática vem marcada em instalação nova e pode ser alterada no menu do app. A validação da instalação 0.6 é separada do teste anterior 0.5. |
 
 Clique no indicador para abrir seu detalhe e use o menu de contexto para personalizar. No macOS, clique com o botão direito na barra. No Windows, o ícone NexoBar na bandeja permite recuperar as opções mesmo com os modos desligados; ele pode estar em “Mostrar ícones ocultos”. Fechar a configuração mantém o coletor; **Sair** encerra o aplicativo.
 

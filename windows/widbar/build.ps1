@@ -6,6 +6,9 @@ param(
     [string]$PackagesDirectory,
     [string]$Publisher = 'CN=NexoBar',
     [string]$MakeAppxPath,
+    # Package revision (4th version field). Default: 5-minute ticks since 2026-11-01, so every rebuild of the same
+    # app version is newer than the installed widget and the installer replaces it.
+    [ValidateRange(0, 65535)][int]$Revision = [int][Math]::Floor(([DateTime]::UtcNow - [DateTime]::new(2026, 11, 1, 0, 0, 0, [DateTimeKind]::Utc)).TotalMinutes / 5),
     [switch]$ContractOnly
 )
 $ErrorActionPreference = 'Stop'
@@ -72,6 +75,8 @@ Copy-Item $catalog (Join-Path $stage 'Public/plugin.json')
 [xml]$manifest = Get-Content (Join-Path $PSScriptRoot 'Package.appxmanifest')
 $manifest.Package.Identity.Publisher = $Publisher
 $manifest.Package.Identity.ProcessorArchitecture = $Architecture
+$baseVersion = [Version]$manifest.Package.Identity.Version
+$manifest.Package.Identity.Version = "$($baseVersion.Major).$($baseVersion.Minor).$($baseVersion.Build).$Revision"
 $manifest.Save((Join-Path $stage 'AppxManifest.xml'))
 # Reproducible package marks, rendered locally; no generated or remote artwork dependencies.
 Add-Type -AssemblyName System.Drawing.Common

@@ -1,7 +1,7 @@
 namespace NexoBar.Setup.Core;
 
 public sealed record InstallOptions(bool? BarEnabled = null, bool? TrayEnabled = null, bool? WidgetEnabled = null, bool? AutoStart = null);
-public enum InstallKind { New, Upgrade, Reuse, Repair, RefuseDowngrade, UnknownCollision }
+public enum InstallKind { New, Upgrade, Reuse, Repair, RefuseDowngrade, UnknownCollision, Replace }
 public sealed record InstallState(string Product, string Version, string Executable, string ManifestHash);
 public sealed record InstallPlan(InstallKind Kind, string Target, string Message)
 {
@@ -15,15 +15,13 @@ public sealed record InstallPlan(InstallKind Kind, string Target, string Message
                 return new(InstallKind.UnknownCollision, target, "Recibo desconhecido. Nenhum arquivo será substituído.");
             if (version > Version.Parse(manifest.Version)) return new(InstallKind.RefuseDowngrade, target, "Uma versão mais nova já está instalada.");
         }
+        // Only a byte-identical install of this exact payload is reused; any other folder for this version is replaced.
         if (Directory.Exists(target))
-        {
-            if (current is null || current.Version != manifest.Version || current.ManifestHash != manifestHash ||
-                !string.Equals(Path.GetFullPath(current.Executable), Path.Combine(target, "NexoBar.exe"), StringComparison.OrdinalIgnoreCase))
-                return new(InstallKind.UnknownCollision, target, "O destino existente não pertence a este instalador.");
-            if (manifest.VerifyInstalled(target)) return new(InstallKind.Reuse, target, "Versão íntegra: reutilizar arquivos existentes.");
-            return new(InstallKind.Repair, target, "Versão alterada: reparo indisponível. Preserve os arquivos e escolha um destino limpo após revisão.");
-        }
-        return new(current is null ? InstallKind.New : InstallKind.Upgrade, target, "Instalar aplicativo por usuário; versões anteriores serão preservadas.");
+            return current is not null && current.Version == manifest.Version && current.ManifestHash == manifestHash &&
+                string.Equals(Path.GetFullPath(current.Executable), Path.Combine(target, "NexoBar.exe"), StringComparison.OrdinalIgnoreCase) && manifest.VerifyInstalled(target) ?
+                new(InstallKind.Reuse, target, "Versão íntegra: reutilizar arquivos existentes.") :
+                new(InstallKind.Replace, target, "Substituir a pasta existente da versão " + manifest.Version + "; versões anteriores serão removidas.");
+        return new(current is null ? InstallKind.New : InstallKind.Upgrade, target, "Instalar aplicativo por usuário; versões anteriores serão removidas.");
     }
 }
 
@@ -62,11 +60,11 @@ public static class WidgetCoordinator
             if (platform.HostVersion() is not { } verified || verified < new Version(1, 2, 8, 0))
                 return new(false, "WidBar não confirmado após solicitação. Abra a Store e verifique novamente.");
         }
-        if (platform.CompanionVersion() is { } installed && installed >= new Version(0, 6, 1, 0))
+        if (platform.CompanionVersion() is { } installed && installed >= InstallManifest.CompanionTarget)
             return new(true, "Companion compatível já instalado; sem reinstalação/downgrade.");
         var result = await platform.EnsureCompanion(package, token, progress);
         if (!result.Success) return result;
-        return platform.CompanionVersion() is { } version && version >= new Version(0, 6, 1, 0) ?
+        return platform.CompanionVersion() is { } version && version >= InstallManifest.CompanionTarget ?
             new(true, "Companion confirmado. Abra WidBar e adicione NexoBar pelo catálogo.") : new(false, "Companion não confirmado após solicitação; verifique novamente.");
     }
 }

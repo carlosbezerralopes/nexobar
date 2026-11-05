@@ -7,13 +7,15 @@
     <UseWindowsForms>true</UseWindowsForms>
     <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>NexoBar.ico</ApplicationIcon>
     <AssemblyName>NexoBar</AssemblyName>
-    <Version>0.6.1</Version>
+    <Version>0.7.0</Version>
     <StartupObject>NexoBar.Windows.Program</StartupObject>
     <ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../core/NexoBar.Core.csproj" />
     <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.6" />
+    <EmbeddedResource Include="NexoBar.ico" LogicalName="NexoBar.ico" />
   </ItemGroup>
 </Project>

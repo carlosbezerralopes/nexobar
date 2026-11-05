@@ -58,8 +58,28 @@ public static class AtomicFiles
         {
             using (var f = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None)) { f.Write(content); f.Flush(true); }
             if (!PreferencesPatch.Matches(path, expected)) throw new IOException("O arquivo mudou durante a instalação: " + path);
-            if (expected is null) File.Move(temp, path, false); else File.Replace(temp, path, null);
+            Retry(() => { if (expected is null) File.Move(temp, path, false); else File.Replace(temp, path, null); }, path);
         }
         finally { if (File.Exists(temp)) File.Delete(temp); }
+    }
+    // On a sharing violation the holders are identified: NexoBar's own processes are closed at once; third parties
+    // (antivirus, Explorer, indexer) usually release within seconds, and are named in the error if they do not.
+    public static void Retry(Action action, params string[] paths)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            try { action(); return; }
+            catch (Exception e) when (e is UnauthorizedAccessException || (e is IOException io && (io.HResult & 0xFFFF) is 32 or 33))
+            {
+                if (attempt == 0 && paths.Length > 0 && FileLocks.Release(paths).Closed) continue;
+                if (attempt >= 20)
+                {
+                    var others = paths.Length > 0 ? FileLocks.Release(paths).Others : [];
+                    throw new IOException((others.Count > 0 ? "Arquivo em uso por " + string.Join(", ", others) + ". Feche e tente novamente." : e.Message) +
+                        (paths.Length > 0 ? " (" + string.Join(", ", paths) + ")" : ""), e);
+                }
+                Thread.Sleep(250);
+            }
+        }
     }
 }

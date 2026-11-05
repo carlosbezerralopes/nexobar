@@ -23,13 +23,17 @@ public sealed class InstallTransaction(InstallEnvironment environment, InstallMa
         if (prefs.Warning is not null) messages.Add(prefs.Warning);
         SafePaths.NoReparseParents(environment.Root);
         Directory.CreateDirectory(environment.Root);
-        using var installLock = new FileStream(Path.Combine(environment.Root, ".install.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        FileStream? held = null;
+        string lockPath = Path.Combine(environment.Root, ".install.lock");
+        try { AtomicFiles.Retry(() => held = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None), lockPath); }
+        catch (IOException e) { throw new IOException("Outra instalação do NexoBar está em andamento. " + e.Message, e); }
+        using var installLock = held!;
         // Recompute after the single-writer lock; a competing installer may have just committed.
         plan = Plan();
         if (plan.Kind is InstallKind.RefuseDowngrade or InstallKind.UnknownCollision or InstallKind.Repair) throw new IOException(plan.Message);
         string staging = Path.Combine(environment.Root, ".staging-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(staging);
-        var rollback = new Stack<Action>(); bool appCommitted = false; bool createdTarget = false;
+        var rollback = new Stack<Action>(); bool appCommitted = false; bool createdTarget = false; string? replaced = null;
         try
         {
             progress?.Report("Conferindo todos os arquivos do pacote…");
@@ -44,10 +48,18 @@ public sealed class InstallTransaction(InstallEnvironment environment, InstallMa
             byte[] shortcut = environment.Services.CreateShortcut(exe);
             cancellationToken.ThrowIfCancellationRequested();
             progress?.Report(plan.Message);
+            if (plan.Kind == InstallKind.Replace)
+            {
+                // Moved aside, not deleted, until the new version commits; rollback moves it back.
+                string aside = Path.Combine(environment.Root, ".replaced-" + Guid.NewGuid().ToString("N"));
+                SafePaths.NoReparseParents(plan.Target);
+                AtomicFiles.Retry(() => Directory.Move(plan.Target, aside), plan.Target); replaced = aside;
+                rollback.Push(() => { DeleteOwnedTree(plan.Target); AtomicFiles.Retry(() => Directory.Move(aside, plan.Target), aside); replaced = null; });
+            }
             if (plan.Kind != InstallKind.Reuse)
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(plan.Target)!);
-                Directory.Move(Path.Combine(staging, "app"), plan.Target); createdTarget = true;
+                AtomicFiles.Retry(() => Directory.Move(Path.Combine(staging, "app"), plan.Target), Path.Combine(staging, "app")); createdTarget = plan.Kind != InstallKind.Replace;
             }
             WriteTracked(environment.StartMenuShortcut, shortcut, shortcutBefore, rollback);
             byte[] stateAfter = JsonSerializer.SerializeToUtf8Bytes(new InstallState("NexoBar", manifest.Version, exe, manifestHash));
@@ -61,6 +73,7 @@ public sealed class InstallTransaction(InstallEnvironment environment, InstallMa
             if (PreferencesPatch.Write(environment.Preferences, prefs)) rollback.Push(() => RestoreIfUnchanged(environment.Preferences, prefs.After!, prefs.Before));
             appCommitted = true; rollback.Clear();
             progress?.Report("Aplicativo instalado.");
+            if (RemovePrevious(plan.Target, replaced) is { } leftover) messages.Add(leftover);
             if (options.WidgetEnabled is true)
             {
                 try
@@ -86,6 +99,20 @@ public sealed class InstallTransaction(InstallEnvironment environment, InstallMa
             throw;
         }
         finally { DeleteOwnedTree(staging); }
+    }
+    // After commit, older version folders and the replaced copy are deleted; a locked leftover is reported, not fatal.
+    string? RemovePrevious(string target, string? replaced)
+    {
+        var failed = new List<string>();
+        var folders = Directory.EnumerateDirectories(Path.Combine(environment.Root, "versions"))
+            .Where(d => !string.Equals(Path.GetFullPath(d), Path.GetFullPath(target), StringComparison.OrdinalIgnoreCase)).ToList();
+        if (replaced is not null) folders.Add(replaced);
+        foreach (string folder in folders)
+        {
+            try { AtomicFiles.Retry(() => DeleteOwnedTree(folder), folder); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { failed.Add(Path.GetFileName(folder)); }
+        }
+        return failed.Count == 0 ? null : "Versões anteriores não removidas (em uso): " + string.Join(", ", failed);
     }
     void CheckShortcut(byte[]? before)
     { if (before is not null && !environment.Services.OwnsShortcut(before, environment.Root)) throw new IOException("Atalho existente desconhecido foi preservado."); }

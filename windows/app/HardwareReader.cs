@@ -13,6 +13,13 @@ internal sealed class HardwareReader : IDisposable
     private DateTimeOffset lastDiscovery;
     private int rediscover;
     private readonly object gate = new();
+    private readonly Dictionary<int, bool?> solidState = [];
+    private readonly Dictionary<int, DiskCounters> diskCounters = [];
+    private static readonly Lazy<string?> CpuName = new(() =>
+    {
+        using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"HARDWARE\DESCRIPTION\System\CentralProcessor\0");
+        return (key?.GetValue("ProcessorNameString") as string)?.Trim();
+    });
     public IReadOnlyList<Reading> Read()
     {
         lock (gate)
@@ -34,9 +41,13 @@ internal sealed class HardwareReader : IDisposable
                 {
                     try { Update(item, hardware); } catch (Exception) { /* Inaccessible sensors remain null. */ }
                 }
-            double? temperature = ValidTemperature(hardware.Where(h => h.HardwareType == HardwareType.Cpu).SelectMany(h => h.Sensors));
+            var sensors = SensorClient.Read();
+            double? localTemperature = ValidTemperature(hardware.Where(h => h.HardwareType == HardwareType.Cpu).SelectMany(h => h.Sensors));
+            double? temperature = localTemperature ?? sensors?.CpuTemperature;
             double? cpu = ReadCpu();
-            List<Reading> results = [new("cpu", "CPU", now, cpu, temperature, Source: "Windows GetSystemTimes · delta kernel+user sem idle", Unavailable: cpu is null ? "Aguardando amostra ou contador indisponível" : null)];
+            string cpuSource = "Windows GetSystemTimes · delta kernel+user sem idle" + (localTemperature is null && sensors?.CpuTemperature is not null ? " · temperatura: serviço NexoBar Sensores" :
+                temperature is null ? " · temperatura " + (sensors?.CpuStatus ?? (sensors is null ? "exige o serviço NexoBar Sensores" : "indisponível")) : "");
+            List<Reading> results = [new("cpu", "CPU", now, cpu, temperature, Source: cpuSource, Unavailable: cpu is null ? "Aguardando amostra ou contador indisponível" : null, HardwareName: CpuName.Value)];
             var memory = new MemoryStatus { Length = (uint)Marshal.SizeOf<MemoryStatus>() };
             if (GlobalMemoryStatusEx(ref memory))
             {
@@ -45,6 +56,16 @@ internal sealed class HardwareReader : IDisposable
                     UsedBytes: used, TotalBytes: memory.TotalPhysical, Source: "GlobalMemoryStatusEx · RAM física total menos disponível"));
             }
             else results.Add(new("memory", "Memória", now, Source: "GlobalMemoryStatusEx", Unavailable: "Contador indisponível"));
+            var volumes = DiskProbe.Volumes();
+            var activity = new Dictionary<int, DiskActivity>();
+            foreach (int disk in volumes.Select(v => v.DiskNumber).Distinct())
+            {
+                if (!solidState.ContainsKey(disk)) solidState[disk] = DiskProbe.SolidState(disk);
+                var counters = DiskProbe.Counters(disk);
+                if (counters is not null && diskCounters.TryGetValue(disk, out var before) && DiskCounters.Delta(before, counters) is { } delta) activity[disk] = delta;
+                if (counters is not null) diskCounters[disk] = counters; else diskCounters.Remove(disk);
+            }
+            results.AddRange(DiskReadings.Build(volumes, solidState, sensors, now, activity));
             foreach (var gpu in hardware.Where(h => h.HardwareType is HardwareType.GpuNvidia or HardwareType.GpuAmd or HardwareType.GpuIntel))
             {
                 double? load = Value(gpu.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Load && s.Name.Equals("GPU Core", StringComparison.OrdinalIgnoreCase)));
@@ -55,7 +76,7 @@ internal sealed class HardwareReader : IDisposable
                 results.Add(new("gpu:" + gpu.Identifier, gpu.Name, now, load, ValidTemperature(gpu.Sensors),
                     MbBytes(usedMb), MbBytes(totalMb), Source: "LibreHardwareMonitor 0.9.6 · " + gpu.Identifier,
                     Unavailable: load is null && ValidTemperature(gpu.Sensors) is null && usedMb is null ? "GPU detectada; sensores inacessíveis ao usuário atual" : null,
-                    Vendor: gpu.HardwareType switch
+                    HardwareName: gpu.Name, Vendor: gpu.HardwareType switch
                     {
                         HardwareType.GpuNvidia => GpuVendor.Nvidia,
                         HardwareType.GpuAmd => GpuVendor.Amd,
