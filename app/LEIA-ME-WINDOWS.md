@@ -1,0 +1,74 @@
+# NexoBar para Windows — preview 0.6.1
+
+O patch 0.6.1 corrige o início da consulta à ponte quando o preview WidBar começa oculto e o estado de habilitação ainda é desconhecido. Esse estado permite a primeira consulta; uma resposta explicitamente desabilitada continua respeitada. A correção trata uma condição lógica de bootstrap e não comprova causas externas de visibilidade. O [registro 0.6.0](docs/VALIDATION-0.6.md) é histórico; build, instalação e aceite do patch são registrados separadamente.
+
+No modo portátil, extraia **todo o ZIP** em uma pasta local e abra `NexoBar.exe`. O pacote win-x64 inclui o runtime .NET 10; o usuário não precisa instalar .NET. Requer Windows 11 x64 nativo. O portátil não configura inicialização automática nem solicita elevação.
+
+Os três modos têm interruptores independentes em **Personalizar barra → Apresentação**. Podem ser usados juntos; os indicadores compartilham o mesmo coletor. O ícone NexoBar de configurações permanece acessível mesmo com todos os modos desligados.
+
+A 0.6 acrescenta renovação opcional independente dos nomes, cotas em duas linhas quando há duas janelas reais e espaço entre linhas WidBar de 0–12 px (padrão 4). Uma janela semanal Codex aparece sozinha. Temperatura de CPU/GPU é opcional e depende do sensor; as prévias são demonstrativas. A organização permite 1–8 indicadores no total por página, com distribuição por linha: 2+3 é um preset, não um limite. Veja a [matriz de recursos e limites 0.6](docs/PARITY-0.6.md).
+
+- **Faixa fixa:** fundo translúcido ajustável, texto opaco e monitor selecionável. Por padrão não reserva espaço: janelas maximizam atrás dela. Marque **Reservar área útil** para recuperar o comportamento AppBar anterior. Desligar ou sair libera a reserva. A política distingue estado ocupado (`QUNS_BUSY`) de fullscreen e considera a geometria da janela; a correção está implementada, mas o teste com aplicativos fullscreen reais permanece pendente.
+- **Bandeja:** um ícone dinâmico por indicador habilitado, números ampliados, tema do sistema, tooltip e clique para seu detalhe. Imagens nativas em 16/20/24 px foram revisadas; cliques e overflow ainda exigem validação física. GPUs preservam IDs individuais. O Windows controla posição e overflow; mova os ícones desejados para a parte visível da bandeja.
+- **WidBar:** plugin WinUI que recebe somente as leituras do NexoBar. Configurações: 1–8 indicadores por página, horizontal/duas linhas ou posições personalizadas, largura global de 120–600 px lógicos, rotação de 2–60 segundos e pausa ao passar o mouse. Em **Personalizar barra → WidBar**, escolha linha e ordem; o preset coloca CPU e memória acima e Claude, Codex e Kiro abaixo. Ele organiza os cinco IDs, mantendo a seleção de indicadores nas opções correspondentes. Os ícones usam as fontes vetoriais do Mac. No host, cada instância pode herdar a largura global ou usar largura própria, com Save/Cancel. Há prévias demonstrativas. **Exige o host WidBar e o pacote companion instalado; ligar o interruptor não instala esses componentes.**
+
+O executável portátil inclui faixa e bandeja. O código do companion e seu construtor MSIX estão em `widbar-source/windows/widbar/` no ZIP: leia o README dessa pasta. **WinUI/XAML e MSIX 0.5 foram compilados nativamente, a assinatura de teste foi verificada e a instalação local confirmou a versão 0.5.0.0.** O companion 0.4 havia sido descoberto/adicionado ao host WidBar 1.2.8 e mostrado “Em execução”, com cliente da ponte ativo. Essa evidência anterior não valida o novo layout 0.6 no host. No código-fonte do projeto, a entrada é `windows/widbar/build.ps1`; no kit distribuído, é `widbar-source/windows/widbar/build.ps1`. Não precisa recompilar o app portátil para usar faixa/bandeja.
+
+O [instalador de arquivo único](setup/README.md), `NexoBar-Setup-x64.exe`, inclui o runtime: abra, escolha faixa/bandeja/WidBar, revise o destino e confirme a instalação. Autostart é uma opção explícita; preferências existentes são preservadas. Se o NexoBar estiver aberto, use **Sair** nele e **Verificar novamente** no instalador. A importação opcional do certificado público exige consentimento e UAC; o candidato preview usa assinatura local de teste, sem reputação pública comprovada. Na versão 0.5, build, integridade/confiança, assinatura e instalação foram verificados no [registro nativo](docs/INSTALLATION-VALIDATION.md). Isso não comprova a UI ou instalação da 0.6.
+
+- Clique esquerdo abre o detalhe somente do indicador clicado; clique direito abre o menu.
+- O ícone **NexoBar** na bandeja permite ligar/desligar modos, personalizar, reler e sair. Se o Windows agrupar ícones, procure em “Mostrar ícones ocultos”. Fechar uma janela de detalhe ou configuração mantém o coletor.
+- Personalização: monitor, mostrar/ocultar, nome completo, ordem, temperatura filha de CPU/GPU, memória nominal/percentual, cotas horizontais/duas linhas, renovação opcional independente dos nomes e tempo compacto/detalhado. **Aplicar** grava as preferências.
+- Todos os recursos ocultos mantêm um botão NexoBar. Excedentes aparecem em **+N**, com acesso ao detalhe. O tema acompanha `SystemUsesLightTheme`, somente leitura; botões usam cores de texto e interação com contraste definido.
+- CPU e RAM atualizam a cada 3 segundos. Gráficos mantêm até 5 minutos somente em RAM e expiram mesmo após falha de sensor. CPU usa delta de `GetSystemTimes`; a primeira amostra é desconhecida. RAM usa total físico menos disponível de `GlobalMemoryStatusEx`, em GiB.
+- LibreHardwareMonitor 0.9.6 fornece temperatura e cada GPU separadamente, com o `hardware.Identifier` como identidade salva. A barra não reduz múltiplas GPUs a uma máxima. Carga, temperatura e VRAM são exibidas somente quando informadas. GPUs ausentes preservam ordem/nome/visibilidade e reaparecem ao serem redescobertas; inventário é refeito a cada minuto. Mudanças de ID feitas pelo driver podem criar uma nova entrada.
+- Cada GPU mostra uma mini marca **NVIDIA**, **intel** ou **AMD** na barra e no detalhe, como os wordmarks da referência Codenotch. O fabricante vem do tipo de hardware informado pelo backend, nunca do nome editável. Fabricante desconhecido usa um ícone genérico; duas GPUs do mesmo fabricante continuam com nomes, leituras e IDs separados. As marcas usam texto monocromático em Segoe UI, sem incorporar arquivos de logotipo.
+- O código não altera controles de ventoinha, tensão, relógio ou potência. Sensores que dependam de drivers/permissões indisponíveis aparecem como indisponíveis. O NexoBar não executa instalador nem solicita elevação; sensores dependem das permissões e do driver do backend. CPU/RAM continuam disponíveis sem temperatura.
+
+Preferências em `%LOCALAPPDATA%\NexoBar\indicators.json`, gravadas por substituição atômica. `--data-directory <pasta-absoluta>` isola preferências, inclusive as pastas das CLIs. A barra não grava quotas, logs de conversa, atividade, histórico físico ou credenciais.
+
+## IA pela sessão existente
+
+| Provedor | Fonte | Limite |
+|---|---|---|
+| Claude | Claude Code nativo temporário em ConPTY: somente `/usage` | Pasta explícita já confiável e sessão existente. Executável `claude.exe`, inclusive do pacote npm oficial; shim `.cmd` não é executado. Sem fallback status line/Desktop. |
+| Codex | `codex app-server`, RPC `account/rateLimits/read` | Só a sessão da CLI existente; janelas por modelo ficam no detalhe. |
+| Kiro | `kiro-cli chat --no-interactive /usage` | Parser estrito do texto de cota; CLI ausente/incompatível fica indisponível. |
+| Copilot | `gh api --hostname github.com copilot_internal/user` | Usa a sessão de gh; sem exportação de token. |
+| Antigravity, Cursor, Grok, OpenCode Go, GLM | Indisponível | Nenhuma interface segura validada no Windows neste ciclo. |
+
+Claude abre um terminal invisível de 160×80, envia somente `/usage` após reconhecer o prompt inicial confiável, aguarda terminar a atualização e um frame estável por 1s, e encerra a árvore própria. Limites: 45s e 512KiB de saída total, sem gravar transcrição. O parser VT incremental considera somente o frame atual; login, trust, setup e falhas de carregamento interrompem a consulta sem responder. O cliente usa sua própria autenticação interna; o NexoBar não lê credenciais, não faz login e não envia prompts ao modelo. RemoteControl e atualização automática são desativados somente no auxiliar; `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` não é usado porque impediu a leitura medida no Mac.
+
+As demais consultas têm stdin fechado, timeout de 20s e saída limitada a 512KiB; o Codex recebe apenas RPC fixo. Todos os processos são criados suspensos e vinculados a um Job kill-on-close antes de executar. Leitura e controle ConPTY usam canais separados, com drenagem concorrente durante o encerramento inclusive nas versões anteriores ao Windows 11 24H2. Timeout, cancelamento, saída precoce e Sair encerram os processos próprios. Falhas substituem a leitura por indisponível; não recuperam cota antiga. Claude é consultado a cada 5min ou por **Atualizar Claude**; os demais provedores, a cada minuto quando habilitados.
+
+Configure **Personalizar barra → Pastas das CLIs → Claude** antes de usar. A pasta deve existir, ser absoluta e já ter confiança concedida pelo próprio Claude Code. Não há escolha automática de pasta pessoal. Escolher aqui não concede confiança. Codex aceita pasta opcional; sem ela, usa o diretório temporário próprio do app. As pastas são persistidas em `indicators.json` do data-directory escolhido. A consulta não altera configurações, status line ou sessões dos clientes manualmente.
+
+Zero só aparece se explicitamente informado. Somente janelas reais aparecem na faixa; uma semanal sozinha ocupa uma linha, mesmo no layout de duas linhas. Contador vencido não confirma renovação. O aviso opcional requer um novo reset informado e queda no uso. Atividade de tarefa de IA não é inferida do consumo físico e permanece **não informada pela fonte**.
+
+Resets são interpretados no fuso explicitamente informado pela CLI; timezone desconhecido, datas inválidas e horários DST ambíguos/inexistentes ficam sem contador. A ausência de um reset não inventa uma janela. Mudanças no layout/texto da CLI podem causar indisponibilidade. **O transporte e o encerramento ConPTY passaram no Windows com clientes sintéticos.** Consultas nativas Codex e Kiro retornaram uma janela cada. O diagnóstico comparativo posterior do instalado 0.5 confirmou `/usage` com o executável nativo npm e PATH temporário, sem login/trust; isso não comprova o app 0.6 com PATH normal. Veja [contrato e evidências Claude](docs/CLAUDE-CONPTY.md). Copilot estava ausente na validação anterior.
+
+## Compilar e verificar
+
+Pré-requisitos de desenvolvimento: PowerShell 7, .NET SDK 10 e acesso ao NuGet oficial. Na raiz `NexoBar`:
+
+```powershell
+pwsh -NoProfile -File windows/scripts/build.ps1
+```
+
+O script roda fixtures do core e testes reais de pipe, compila o harness ConPTY sintético (e o executa somente em Windows), compila WPF code-only em `net10.0-windows` com `EnableWindowsTargeting=true`, publica `win-x64 --self-contained` e gera `dist/NexoBar-Windows-x64-preview.zip` por padrão. Use `-OutputZip` para nomear um pacote versionado, como `NexoBar-Windows-x64-0.6.1-preview.zip`. O kit-fonte WidBar é incluído separadamente; esse build não gera seu MSIX. Temporários ficam sob `TEMP/NexoBar/windows-build`; `-ArtifactsDirectory` e `-PackagesDirectory` isolam outro contexto. Não faz instalação, commit ou upload.
+
+O build nativo anterior 0.5 passou em Windows 11 x64 (build 26300), com .NET SDK 10.0.402: 226 checks do núcleo, 60 de ponte/configuração/vetores e 63 de ConPTY sintético. As fixtures não chamam CLIs autenticadas. Na validação anterior 0.4, os Jobs próprios terminaram sem raízes ou descendentes e handles passaram de 326 para 327 após aquecimento do runtime. O diagnóstico nativo leu CPU/RAM e identificou Intel Iris Xe, compatível com o inventário Windows; carga/temperatura GPU e temperaturas CPU ficaram indisponíveis. Apenas uma GPU física e um monitor estavam disponíveis; Microsoft Remote Display Adapter não conta como GPU física adicional.
+
+A configuração WPF 0.5 mostrou o preset CPU/memória acima e Claude/Codex/Kiro abaixo, controle de cinco itens, botões de linha/ordem e prévia 2+3. O preset foi aplicado e o JSON confirmou os cinco IDs com largura 402 px. O host reabriu “Em execução”; as opções do companion mostraram os cinco ícones em 2+3. Largura própria de 305 px foi testada, Cancelar restaurou a herança de 402 px e Salvar com largura herdada foi executado. A taskbar real, as oito combinações físicas, cliques, transparência, reserva de área, fullscreen, rotação WidBar e DPI ainda exigem revisão manual. Múltiplas GPUs e monitores/DPI misto também permanecem pendentes. Veja a [matriz de evidências](docs/VALIDATION.md).
+
+Depois de extrair o ZIP em Windows nativo, rode `pwsh -NoProfile -File smoke-windows.ps1 -OpenUI`. O script grava um diagnóstico de CPU/RAM/GPUs em `TEMP/NexoBar/windows-native-smoke/sensors.json` e abre a GUI com dados isolados. Ausência de temperatura não é falha automática. Confira os nomes/quantidade de GPUs contra o Gerenciador de Dispositivos.
+
+O pacote inclui `native-tests/NexoBar.ConPty.Tests.exe`. `pwsh -NoProfile -File smoke-windows.ps1 -TestConPty` testa somente processos sintéticos: sucesso após refresh, trust/login/setup sem input, timeout, cancelamento, shutdown, excesso de saída, saída da raiz com descendente, falha de startup, Jobs vazios e handles limitados. Nenhuma CLI autenticada é executada por esse harness. O harness é opt-in no smoke; seu watchdog externo é de 20s por caso.
+
+Somente para diagnóstico real explicitamente solicitado, execute `pwsh -NoProfile -File smoke-windows.ps1 -QueryClaude -ClaudeFolder 'C:\pasta-ja-confiavel'`. O script cria dados isolados em TEMP e chama `--diagnose-claude --output <json>`; registra somente resultado sanitizado, percentuais/resets, duração e Jobs próprios após conclusão. Não inclui texto do terminal, tokens ou login. `--data-directory` também vale nesse modo. O smoke padrão não consulta Claude.
+
+Para validar os modos no Windows: exercite as oito combinações de liga/desliga; confirme recuperação com todos desligados; maximize uma janela com reserva desligada e ligada; compare fundos claros/escuros e DPI; clique em indicadores diferentes da bandeja. O smoke usa preferências e pipe isolados: o companion WidBar conecta somente à instância normal do NexoBar, evitando mistura de testes. Avalie WidBar após instalar seu companion: duas/quatro métricas, rotação, hover, cliques por ID, desligar/religar, perda da conexão e reinício do host.
+
+Contrato e APIs públicas: [CLAUDE-CONPTY.md](docs/CLAUDE-CONPTY.md). A consulta Claude e a política de sessão existente permanecem iguais em todos os modos.
+
+Licenças e fontes: [THIRD-PARTY-NOTICES.md](docs/THIRD-PARTY-NOTICES.md). Matriz de evidências: [VALIDATION.md](docs/VALIDATION.md).
