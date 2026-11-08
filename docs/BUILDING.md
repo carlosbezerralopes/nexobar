@@ -4,13 +4,13 @@ Execute os comandos na raiz do código-fonte. Os builds usam diretórios tempor�
 
 ## macOS
 
-Requisitos: macOS 14+, toolchain Swift 6 e PowerShell 7. O pacote padrão usa a arquitetura do host; o preview distribuível atual é arm64.
+Requisitos: macOS 14+, Xcode (toolchain Swift 6 e extrator de App Intents do widget) e PowerShell 7. O pacote padrão usa a arquitetura do host; o preview distribuível atual é arm64.
 
 ```powershell
 pwsh -NoProfile -File scripts/build.ps1
 ```
 
-O script executa os testes Swift, compila release, monta `NexoBar.app`, aplica assinatura local e verifica o bundle antes de gerar `dist/NexoBar-macOS-preview.zip`. Essa assinatura não equivale a notarização Apple. Build e bundle ficam fora de pastas sincronizadas para evitar metadados do File Provider que invalidam a assinatura. O backend nativo do SwiftPM é uma contingência do toolchain atual.
+O script executa os testes Swift, compila release, monta `NexoBar.app` com a extensão do [widget dos workers](WORKERS-WIDGET.md) em `Contents/PlugIns`, aplica assinatura local e verifica o bundle antes de gerar `dist/NexoBar-macOS-preview.zip`. Essa assinatura não equivale a notarização Apple. Build e bundle ficam fora de pastas sincronizadas para evitar metadados do File Provider que invalidam a assinatura. O backend nativo do SwiftPM é uma contingência do toolchain atual.
 
 Opções de `NexoBar.app/Contents/MacOS/NexoBar`:
 

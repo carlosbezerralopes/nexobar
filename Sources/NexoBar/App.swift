@@ -224,6 +224,7 @@ final class Dashboard: ObservableObject {
 final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var status: NSStatusItem?
     private var dashboard: Dashboard!
+    private let workersWidget = WorkersWidgetReloader()
     private var popover = NSPopover()
     private var settingsWindow: NSWindow?
     private let strip = StatusStrip(frame: .zero)
@@ -277,6 +278,7 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSPopoverDeleg
         dashboard.onChange = { [weak self] in self?.renderBar() }
         dashboard.onQuotaReset = { [weak self] event in self?.enqueueReset(event) }
         dashboard.start()
+        workersWidget.start()
         renderBar()
         if arguments.contains("--settings") { openSettings() }
         if let index = arguments.firstIndex(of: "--capture-window"), arguments.indices.contains(index + 1) {
