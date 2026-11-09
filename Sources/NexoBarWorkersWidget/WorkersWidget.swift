@@ -15,13 +15,13 @@ struct WorkersProvider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> WorkersEntry { WorkersEntry(date: .now, workers: []) }
 
     func snapshot(for configuration: WorkersWidgetIntent, in context: Context) async -> WorkersEntry {
-        WorkersEntry(date: .now, workers: configuration.apply(to: WorkersTelemetry.load(), now: .now))
+        WorkersEntry(date: .now, workers: configuration.apply(to: WorkersTelemetry.load()))
     }
 
     /// O app pede recarga a cada leitura nova; as entradas futuras marcam o cartão como desatualizado mesmo sem recarga.
     func timeline(for configuration: WorkersWidgetIntent, in context: Context) async -> Timeline<WorkersEntry> {
         let now = Date()
-        let workers = configuration.apply(to: WorkersTelemetry.load(), now: now)
+        let workers = configuration.apply(to: WorkersTelemetry.load())
         log.info("timeline: \(workers.count) workers")
         let dates = [now] + WorkersTelemetry.transitionDates(workers, after: now).prefix(8)
         return Timeline(entries: dates.map { WorkersEntry(date: $0, workers: workers) }, policy: .after(now.addingTimeInterval(WorkersTelemetry.staleAfter)))
@@ -101,9 +101,7 @@ struct WorkerCard: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 4) {
                 Circle().fill(stateColor).frame(width: 6, height: 6)
-                Text(worker.displayName).font(.system(size: 11, weight: .semibold)).lineLimit(1)
-                Spacer(minLength: 2)
-                Text(WorkerFormat.time(worker.sampledAt)).font(.system(size: 10).monospacedDigit()).foregroundStyle(.secondary)
+                Text(worker.displayName).font(.system(size: 11, weight: .semibold)).lineLimit(1).truncationMode(.middle)
             }
             if let statusText {
                 Text(statusText).font(.system(size: 9, weight: .medium)).foregroundStyle(stateColor).lineLimit(1)
@@ -114,6 +112,7 @@ struct WorkerCard: View {
                 Text(detail ?? "sem leitura").font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(3)
             }
             Spacer(minLength: 0)
+            Text(WorkerFormat.time(worker.sampledAt)).font(.system(size: 9).monospacedDigit()).foregroundStyle(.secondary)
         }
         .padding(7)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -133,8 +132,9 @@ struct WorkerCard: View {
             } else {
                 row("GPU", ["sem GPU"], secondary: true)
             }
-            row("SSD", [WorkerFormat.percent(r.ssd?.uso), WorkerFormat.temperature(r.ssd?.temp), "\(WorkerFormat.gigabytes(r.ssd?.livre_gb))G livre"])
-            row("RAM", ["\(WorkerFormat.gigabytes(r.ram?.usada_gb))/\(WorkerFormat.gigabytes(r.ram?.total_gb))G"] + (compact ? [] : ["swap \(WorkerFormat.gigabytes(r.ram?.swap_gb))G"]))
+            row("SSD", [WorkerFormat.percent(r.ssd?.ativo), WorkerFormat.temperature(r.ssd?.temp),
+                        (compact ? nil : WorkerFormat.rates(read: r.ssd?.leitura_bs, write: r.ssd?.escrita_bs)) ?? "\(WorkerFormat.gigabytes(r.ssd?.livre_gb)) GB livre"])
+            row("RAM", ["\(WorkerFormat.gigabytes(r.ram?.usada_gb))/\(WorkerFormat.gigabytes(r.ram?.total_gb)) GB"] + (compact ? [] : ["swap \(WorkerFormat.gigabytes(r.ram?.swap_gb)) GB"]))
             GridRow {
                 Image(systemName: "fan").font(.system(size: 8, weight: .semibold)).foregroundStyle(.secondary)
                 Text(WorkerFormat.fans(r.ventoinhas_rpm)).font(.system(size: 10).monospacedDigit()).lineLimit(1)

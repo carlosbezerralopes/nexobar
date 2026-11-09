@@ -4,7 +4,11 @@ import Foundation
 public struct WorkerReading: Codable, Equatable, Sendable {
     public struct CPU: Codable, Equatable, Sendable { public var uso: Double?; public var temp: Double?; public var load1: Double? }
     public struct RAM: Codable, Equatable, Sendable { public var usada_gb: Double?; public var total_gb: Double?; public var swap_gb: Double? }
-    public struct SSD: Codable, Equatable, Sendable { public var uso: Double?; public var livre_gb: Double?; public var temp: Double? }
+    /// `uso` é espaço ocupado (df); o widget mostra `ativo` (% do tempo com E/S, como o Monitor de Recursos) e as taxas, quando o coletor publicar.
+    public struct SSD: Codable, Equatable, Sendable {
+        public var uso: Double?; public var livre_gb: Double?; public var temp: Double?
+        public var ativo: Double?; public var leitura_bs: Double?; public var escrita_bs: Double?
+    }
     public struct GPUProcess: Codable, Equatable, Sendable { public var pid: Int?; public var vram_mb: Double?; public var nome: String? }
     public struct GPU: Codable, Equatable, Sendable {
         public var uso: Double?; public var temp: Double?; public var vram_mb: Double?; public var vram_total_mb: Double?
@@ -94,14 +98,6 @@ public enum WorkersTelemetry {
         return ids.sorted().map { WorkerSnapshot(id: $0, reading: read("\($0).json"), connection: read("\($0).estado.json")) }
     }
 
-    /// Conectados primeiro, depois por nome, para os tamanhos que não cabem todos.
-    public static func prioritized(_ workers: [WorkerSnapshot], now: Date) -> [WorkerSnapshot] {
-        workers.enumerated().sorted { a, b in
-            let sa = a.element.isStale(at: now), sb = b.element.isStale(at: now)
-            return sa == sb ? a.offset < b.offset : !sa
-        }.map(\.element)
-    }
-
     /// Datas em que algum cartão muda de fresco para desatualizado, para a timeline marcar sem depender de recarga.
     public static func transitionDates(_ workers: [WorkerSnapshot], after now: Date) -> [Date] {
         Array(Set(workers.compactMap { w in w.isStale(at: now) ? nil : w.staleAt?.addingTimeInterval(1) })).filter { $0 > now }.sorted()
@@ -120,18 +116,26 @@ public enum WorkersTelemetry {
 
 /// Ordem e apelidos escolhidos no editor do widget.
 public enum WorkersLayout {
-    /// Posições vazias são ignoradas; um worker repetido aparece só na primeira posição; worker escolhido que sumiu da pasta
-    /// continua visível como sem leitura. Sem nenhuma posição escolhida, todos aparecem, conectados primeiro.
-    public static func arrange(_ workers: [WorkerSnapshot], slots: [(id: String?, nickname: String?)], now: Date) -> [WorkerSnapshot] {
-        let chosen = slots.compactMap { slot in slot.id.map { ($0, slot.nickname) } }
-        guard !chosen.isEmpty else { return WorkersTelemetry.prioritized(workers, now: now) }
-        var seen = Set<String>()
-        return chosen.compactMap { id, nickname in
-            guard seen.insert(id).inserted else { return nil }
-            var worker = workers.first { $0.id == id } ?? WorkerSnapshot(id: id, reading: nil, connection: nil)
-            worker.nickname = nickname
-            return worker
+    /// Cada posição mostra o worker escolhido nela ou, vazia, o próximo worker em ordem alfabética ainda não mostrado;
+    /// o apelido da posição vale para o worker que ela mostra. Worker repetido aparece só na primeira posição; worker
+    /// escolhido que sumiu da pasta continua visível como sem leitura. Os que sobram vêm depois, em ordem alfabética.
+    public static func arrange(_ workers: [WorkerSnapshot], slots: [(id: String?, nickname: String?)]) -> [WorkerSnapshot] {
+        var remaining = workers.sorted { $0.id < $1.id }
+        var result: [WorkerSnapshot] = []
+        for slot in slots {
+            var worker: WorkerSnapshot
+            if let id = slot.id {
+                guard !result.contains(where: { $0.id == id }) else { continue }
+                if let index = remaining.firstIndex(where: { $0.id == id }) { worker = remaining.remove(at: index) }
+                else { worker = WorkerSnapshot(id: id, reading: nil, connection: nil) }
+            } else {
+                guard !remaining.isEmpty else { continue }
+                worker = remaining.removeFirst()
+            }
+            worker.nickname = slot.nickname
+            result.append(worker)
         }
+        return result + remaining
     }
 }
 
@@ -150,6 +154,13 @@ public enum WorkerFormat {
     public static func gigabytes(_ v: Double?, digits: Int = 1) -> String { valid(v).map { number($0, digits: $0 >= 100 ? 0 : digits) } ?? missing }
     public static func megabytesAsGB(_ v: Double?) -> String { valid(v).map { $0 < 1024 ? "\(Int($0.rounded()))M" : number($0 / 1024, digits: 1) + "G" } ?? missing }
     public static func watts(_ v: Double?) -> String { valid(v).map { number($0, digits: $0 >= 10 ? 0 : 1) + "W" } ?? missing }
+    /// Mesmo formato do disco no Windows: uma unidade para o par, "L 1,2 E 0,4 MB/s".
+    public static func rates(read: Double?, write: Double?) -> String? {
+        guard let read = valid(read), let write = valid(write) else { return nil }
+        let mega = max(read, write) >= 1_048_576, unit: Double = mega ? 1_048_576 : 1024
+        func f(_ v: Double) -> String { number(v / unit, digits: mega && v / unit < 10 ? 1 : 0) }
+        return "L \(f(read)) E \(f(write)) \(mega ? "MB/s" : "KB/s")"
+    }
     public static func load(_ v: Double?) -> String { valid(v).map { number($0, digits: 2) } ?? missing }
     public static func fans(_ rpm: [Double]?) -> String {
         let values = (rpm ?? []).compactMap(valid)

@@ -14,7 +14,7 @@ struct WorkerQuery: EntityQuery {
     func suggestedEntities() async throws -> [WorkerEntity] { WorkersTelemetry.load().map { WorkerEntity(id: $0.id) } }
 }
 
-/// "Editar widget": até quatro posições, cada uma com worker e apelido. Sem nenhuma escolha, mostra todos, conectados primeiro.
+/// "Editar widget": até quatro posições, cada uma com worker e apelido (regras em `WorkersLayout.arrange`).
 struct WorkersWidgetIntent: WidgetConfigurationIntent {
     static let title: LocalizedStringResource = "Workers"
     static let description = IntentDescription("Escolha a ordem dos workers e dê apelidos a eles.")
@@ -37,7 +37,7 @@ struct WorkersWidgetIntent: WidgetConfigurationIntent {
         }
     }
 
-    func apply(to workers: [WorkerSnapshot], now: Date) -> [WorkerSnapshot] {
-        WorkersLayout.arrange(workers, slots: [(worker1?.id, apelido1), (worker2?.id, apelido2), (worker3?.id, apelido3), (worker4?.id, apelido4)], now: now)
+    func apply(to workers: [WorkerSnapshot]) -> [WorkerSnapshot] {
+        WorkersLayout.arrange(workers, slots: [(worker1?.id, apelido1), (worker2?.id, apelido2), (worker3?.id, apelido3), (worker4?.id, apelido4)])
     }
 }

@@ -8,17 +8,17 @@ Widget WidgetKit (**NexoBar Workers**) que mostra, na mesa do Mac, a telemetria 
 
 | Arquivo | Uso no widget |
 |---|---|
-| `<worker>.json` | Última leitura (formato v1): CPU, RAM, SSD, GPU (`null` sem NVIDIA), ventoinhas, processos. |
+| `<worker>.json` | Última leitura (formato v1): CPU, RAM, SSD, GPU (`null` sem NVIDIA), ventoinhas, processos. No SSD, o widget usa `ativo` (% do tempo com E/S), `leitura_bs` e `escrita_bs` (bytes/s), como o disco no Windows; `uso` é espaço ocupado e não é exibido. Enquanto o coletor não publicar esses campos, o percentual aparece como "—". |
 | `<worker>.estado.json` | `conectando`, `conectado` ou `desconectado`, com o detalhe do SSH. |
 | `<worker>/AAAA-MM-DD.jsonl` | Histórico de 30 s. Ainda não exibido; o caminho está em `WorkersTelemetry.historyURL`. |
 
 ## Comportamento
 
 - Um cartão por worker, na ordem CPU · GPU · SSD · RAM, com temperaturas, ventoinha, o processo que mais usa CPU e o maior processo na GPU, quando houver.
-- A hora da leitura fica sempre no cabeçalho. Leitura recebida há mais de 60 s, worker desconectado ou conectando aparece esmaecido como desatualizado. A timeline já traz a entrada em que cada cartão expira, sem depender de recarga.
+- A hora da leitura fica sempre visível, na última linha do cartão, para o apelido ocupar a largura do cabeçalho. Leitura recebida há mais de 60 s, worker desconectado ou conectando aparece esmaecido como desatualizado. A timeline já traz a entrada em que cada cartão expira, sem depender de recarga.
 - Ausência não é zero: campo sem leitura aparece como "—"; worker sem NVIDIA mostra "sem GPU".
 - Tamanhos: médio (2 cartões, sem load/watts/swap), grande (até 4) e extragrande (até 4 lado a lado).
-- **Editar widget** (clique direito no widget): 1º a 4º worker definem a ordem, e cada posição tem um apelido que substitui o nome no cartão. Posição vazia é ignorada e worker repetido aparece só na primeira. Worker escolhido que sumiu da pasta continua visível como sem leitura. Sem nenhuma escolha, aparecem todos, conectados primeiro.
+- **Editar widget** (clique direito no widget): quatro posições, cada uma com worker e apelido. A posição mostra o worker escolhido ou, vazia, o próximo em ordem alfabética ainda não mostrado; o apelido vale para o worker que ela mostra e substitui o nome no cartão. Worker repetido aparece só na primeira posição; worker escolhido que sumiu da pasta continua visível como sem leitura. Sem escolhas, a ordem é alfabética.
 - O app NexoBar verifica a pasta a cada 5 s e pede ao WidgetKit a recarga quando um arquivo muda.
 
 ## Sandbox e assinatura

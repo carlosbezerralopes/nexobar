@@ -34,6 +34,8 @@ final class WorkersTelemetryTests: XCTestCase {
         XCTAssertNil(cpu.reading?.gpu)
         XCTAssertNil(cpu.reading?.cpu?.temp)
         XCTAssertNil(cpu.reading?.topCPU)
+        XCTAssertNil(cpu.reading?.ssd?.ativo, "espaço ocupado não substitui o tempo ativo")
+        XCTAssertEqual(cpu.reading?.ssd?.uso, 50)
         XCTAssertNil(cpu.connection)
         XCTAssertNil(workers[2].reading)
         XCTAssertEqual(workers[2].connection?.detalhe, "ssh: host down")
@@ -70,7 +72,6 @@ final class WorkersTelemetryTests: XCTestCase {
                        WorkerSnapshot(id: "c", reading: nil, connection: .init(estado: .desconectado, detalhe: nil, desde: 0))]
         let now = Date(timeIntervalSince1970: 1010)
         XCTAssertEqual(WorkersTelemetry.transitionDates(workers, after: now).map(\.timeIntervalSince1970), [1065, 1081])
-        XCTAssertEqual(WorkersTelemetry.prioritized(workers.reversed(), now: now).map(\.id), ["b", "a", "c"])
     }
 
     func testFormatsInPortugueseAndShowsMissingAsDash() {
@@ -85,6 +86,9 @@ final class WorkersTelemetryTests: XCTestCase {
         XCTAssertEqual(WorkerFormat.megabytesAsGB(1536), "1,5G")
         XCTAssertEqual(WorkerFormat.watts(5.23), "5,2W")
         XCTAssertEqual(WorkerFormat.load(0.16), "0,16")
+        XCTAssertEqual(WorkerFormat.rates(read: 1.2 * 1_048_576, write: 400 * 1024), "L 1,2 E 0,4 MB/s")
+        XCTAssertEqual(WorkerFormat.rates(read: 2048, write: 0), "L 2 E 0 KB/s")
+        XCTAssertNil(WorkerFormat.rates(read: nil, write: 10))
         XCTAssertEqual(WorkerFormat.fans([0, 2100]), "0 · 2100 rpm")
         XCTAssertEqual(WorkerFormat.fans([]), "—")
         XCTAssertEqual(WorkerFormat.fans(nil), "—")
@@ -118,22 +122,22 @@ final class WorkersLayoutTests: XCTestCase {
         return WorkerSnapshot(id: id, reading: reading, connection: nil)
     }
 
-    func testWithoutChoicesShowsAllConnectedFirst() {
-        let all = [worker("worker-a", fresh: false), worker("worker-b", fresh: true)]
-        let result = WorkersLayout.arrange(all, slots: [(nil, "x"), (nil, nil)], now: Date(timeIntervalSince1970: 1010))
-        XCTAssertEqual(result.map(\.id), ["worker-b", "worker-a"])
-        XCTAssertEqual(result.map(\.displayName), ["b", "a"])
+    func testWithoutChoicesKeepsAlphabeticalOrderAndNicknamesByPosition() {
+        let all = [worker("worker-c", fresh: true), worker("worker-a", fresh: false), worker("worker-b", fresh: true)]
+        let result = WorkersLayout.arrange(all, slots: [(nil, nil), (nil, "Note"), (nil, nil), (nil, "sobra")])
+        XCTAssertEqual(result.map(\.id), ["worker-a", "worker-b", "worker-c"])
+        XCTAssertEqual(result.map(\.displayName), ["a", "Note", "c"])
     }
 
-    func testChosenOrderAndNicknamesSkipEmptyAndRepeatedSlots() {
+    func testChosenWorkersTakeTheirPositionsAndEmptyOnesTakeTheNextRemaining() {
         let all = [worker("worker-a", fresh: true), worker("worker-b", fresh: true), worker("worker-c", fresh: true)]
-        let result = WorkersLayout.arrange(all, slots: [("worker-c", " GPU "), (nil, "ignorado"), ("worker-a", ""), ("worker-c", "dup")], now: Date(timeIntervalSince1970: 1010))
-        XCTAssertEqual(result.map(\.id), ["worker-c", "worker-a"])
-        XCTAssertEqual(result.map(\.displayName), ["GPU", "a"])
+        let result = WorkersLayout.arrange(all, slots: [("worker-c", " GPU "), (nil, "Primeiro livre"), ("worker-c", "dup"), (nil, "")])
+        XCTAssertEqual(result.map(\.id), ["worker-c", "worker-a", "worker-b"])
+        XCTAssertEqual(result.map(\.displayName), ["GPU", "Primeiro livre", "b"])
     }
 
     func testChosenWorkerMissingFromFolderStaysVisibleWithoutReading() {
-        let result = WorkersLayout.arrange([], slots: [("worker-z", "Desk")], now: Date(timeIntervalSince1970: 0))
+        let result = WorkersLayout.arrange([], slots: [("worker-z", "Desk"), (nil, "nada")])
         XCTAssertEqual(result.map(\.displayName), ["Desk"])
         XCTAssertNil(result[0].reading)
         XCTAssertTrue(result[0].isStale(at: Date(timeIntervalSince1970: 0)))
