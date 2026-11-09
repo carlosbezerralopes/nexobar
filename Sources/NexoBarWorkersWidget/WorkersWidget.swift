@@ -162,7 +162,7 @@ struct WorkerCard: View {
                 let reportsPower = gpu.watts != nil || gpu.vram_total_mb != nil
                 row("GPU", [WorkerFormat.percent(gpu.uso), WorkerFormat.temperature(gpu.temp)] + (reportsPower ? [WorkerFormat.watts(gpu.watts)] : []))
                 if !compact, gpu.vram_total_mb != nil {
-                    row("RAM", [WorkerFormat.vram(used: gpu.vram_mb, total: gpu.vram_total_mb)])
+                    row("VRAM", [WorkerFormat.vram(used: gpu.vram_mb, total: gpu.vram_total_mb)])
                 }
             } else {
                 row("GPU", ["sem GPU"], secondary: true)
@@ -184,7 +184,9 @@ struct WorkerCard: View {
                 .foregroundStyle(secondary ? .secondary : .primary).lineLimit(1)
         }
         return GridRow {
+            // Coluna da largura de "CPU": "VRAM" encolhe um pouco em vez de alargar a coluna e apertar os valores.
             Text(label).font(.system(size: 8, weight: .bold)).foregroundStyle(.secondary)
+                .lineLimit(1).minimumScaleFactor(0.7).frame(width: 20, alignment: .leading)
             ViewThatFits(in: .horizontal) {
                 text(values).fixedSize()
                 text(values, " ").fixedSize()
