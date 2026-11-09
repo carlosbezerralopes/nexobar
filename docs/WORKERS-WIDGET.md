@@ -1,6 +1,6 @@
 # Widget de mesa dos workers — macOS 0.4.0
 
-Widget WidgetKit (**NexoBar Workers**) que mostra, na mesa do Mac, a telemetria dos workers Ubuntu publicada pelo coletor `telemetria-workers`. O NexoBar não coleta nada dos workers: só lê os arquivos que o coletor já grava.
+Widget WidgetKit (**NexoBar Workers**) que mostra, na mesa do Mac, o próprio Mac e os workers Ubuntu. Dos workers, só lê o que o coletor `telemetria-workers` já grava; o Mac é lido pelo NexoBar e gravado no mesmo formato.
 
 ## Fonte
 
@@ -18,20 +18,24 @@ Widget WidgetKit (**NexoBar Workers**) que mostra, na mesa do Mac, a telemetria 
 - A hora da leitura fica sempre visível, na última linha do cartão, para o apelido ocupar a largura do cabeçalho. Leitura recebida há mais de 60 s, worker desconectado ou conectando aparece esmaecido como desatualizado. A timeline já traz a entrada em que cada cartão expira, sem depender de recarga.
 - Ausência não é zero: campo sem leitura aparece como "—"; worker sem NVIDIA mostra "sem GPU".
 - Tamanhos: médio (2 cartões, sem load/watts/swap), grande (até 4) e extragrande (até 4 lado a lado).
-- **Editar widget** (clique direito no widget): quatro posições, cada uma com worker e apelido. O apelido pertence ao worker escolhido na mesma posição e substitui o nome no cartão; apelido em posição sem worker é ignorado. Os escolhidos vêm primeiro, na ordem das posições, e os demais depois, em ordem alfabética com o nome original. Worker repetido aparece só na primeira posição; worker escolhido que sumiu da pasta continua visível como sem leitura.
+- **Clique num cartão**: o NexoBar abre a janela daquela posição para escolher o PC (ou Automático) e o apelido. O apelido pertence ao PC e o acompanha se ele mudar de posição; escolher um PC que já está em outra posição troca as duas. No automático, o Mac vem primeiro e os workers depois, em ordem alfabética. As escolhas ficam em `~/Library/Application Support/NexoBar/widget-workers/posicoes.json`.
 - O app NexoBar verifica a pasta a cada 5 s e pede ao WidgetKit a recarga quando um arquivo muda.
+
+## Mac
+
+O NexoBar grava `~/Library/Application Support/NexoBar/widget-workers/mac.json` a cada 5 s: CPU, memória, GPU e temperaturas do coletor do app; RAM instalada (`hw.memsize`), swap, SSD interno (tempo ativo e taxas do `IOBlockStorageDriver`, espaço livre do volume), ventoinhas (AppleSMC `F0Ac`…), três processos do `ps` (média recente do macOS, não a amostra instantânea do `top`) e sessões do Claude Code, incluindo as do app Claude. Watts, VRAM e temperatura do SSD não têm fonte sem root e ficam fora.
 
 ## Sandbox e assinatura
 
-A extensão é sandbox e lê a pasta pela exceção `com.apple.security.temporary-exception.files.home-relative-path.read-only` ([entitlements](../scripts/macos/WorkersWidget.entitlements)), sem app group nem cópia pelo app. Funciona com a assinatura local (ad-hoc) do preview; uma distribuição pela App Store exigiria outra estratégia.
+A extensão é sandbox e lê as duas pastas (coletor e NexoBar) pela exceção `com.apple.security.temporary-exception.files.home-relative-path.read-only` ([entitlements](../scripts/macos/WorkersWidget.entitlements)), sem app group nem cópia pelo app. Funciona com a assinatura local (ad-hoc) do preview; uma distribuição pela App Store exigiria outra estratégia.
 
 O executável da extensão precisa entrar por `_NSExtensionMain` (`-e _NSExtensionMain` em `Package.swift`), como o Xcode faz. Com o `main` comum do Swift, o ExtensionFoundation para em `EXC_BREAKPOINT` antes de desenhar e o widget não aparece na galeria.
 
 ## Build
 
-A configuração usa App Intents. O editor só mostra as opções se a extensão tiver `Contents/Resources/Metadata.appintents`, que o Xcode normalmente gera. O [build.ps1](../scripts/build.ps1) compila a extensão com `swiftc` emitindo os const values e roda `xcrun appintentsmetadataprocessor`; o build falha se os metadados não forem gerados. O alvo SwiftPM `NexoBarWorkersWidget` continua para compilação e testes.
+O [build.ps1](../scripts/build.ps1) monta a extensão em `Contents/PlugIns` e registra o esquema `nexobar://` no app, usado pelo clique (`nexobar://workers/posicao/<n>`).
 
-Ao mudar o tipo de configuração do widget, suba `CFBundleVersion`: o chronod guarda o descritor por versão e, com a versão antiga, "Editar widget" abre a galeria. Widgets já na mesa criados sem configuração precisam ser removidos e adicionados de novo.
+Ao mudar o tipo de configuração do widget, suba `CFBundleVersion`: o chronod guarda o descritor por versão. A versão 12 trocou o "Editar widget" (App Intents) pelo clique; widgets adicionados antes precisam ser removidos e adicionados de novo.
 
 ## Diagnóstico
 

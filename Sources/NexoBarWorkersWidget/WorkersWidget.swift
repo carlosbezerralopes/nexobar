@@ -1,4 +1,3 @@
-import AppIntents
 import SwiftUI
 import WidgetKit
 import WorkersTelemetry
@@ -11,31 +10,38 @@ struct WorkersEntry: TimelineEntry {
     var workers: [WorkerSnapshot]
 }
 
-struct WorkersProvider: AppIntentTimelineProvider {
+struct WorkersProvider: TimelineProvider {
     func placeholder(in context: Context) -> WorkersEntry { WorkersEntry(date: .now, workers: []) }
 
-    func snapshot(for configuration: WorkersWidgetIntent, in context: Context) async -> WorkersEntry {
-        WorkersEntry(date: .now, workers: configuration.apply(to: WorkersTelemetry.load()))
+    func getSnapshot(in context: Context, completion: @escaping (WorkersEntry) -> Void) {
+        completion(WorkersEntry(date: .now, workers: Self.read()))
     }
 
     /// O app pede recarga a cada leitura nova; as entradas futuras marcam o cartão como desatualizado mesmo sem recarga.
-    func timeline(for configuration: WorkersWidgetIntent, in context: Context) async -> Timeline<WorkersEntry> {
+    func getTimeline(in context: Context, completion: @escaping (Timeline<WorkersEntry>) -> Void) {
         let now = Date()
-        let workers = configuration.apply(to: WorkersTelemetry.load())
+        let workers = Self.read()
         log.info("timeline: \(workers.count) workers")
         let dates = [now] + WorkersTelemetry.transitionDates(workers, after: now).prefix(8)
-        return Timeline(entries: dates.map { WorkersEntry(date: $0, workers: workers) }, policy: .after(now.addingTimeInterval(WorkersTelemetry.staleAfter)))
+        completion(Timeline(entries: dates.map { WorkersEntry(date: $0, workers: workers) }, policy: .after(now.addingTimeInterval(WorkersTelemetry.staleAfter))))
     }
+
+    static func read() -> [WorkerSnapshot] { WorkersLayout.arrange(WorkersTelemetry.loadAll(), config: WidgetLayoutConfig.load()) }
+}
+
+/// Clique no cartão: o NexoBar abre a escolha do PC e do apelido daquela posição.
+enum WorkersLink {
+    static func url(position: Int) -> URL { URL(string: "nexobar://workers/posicao/\(position)")! }
 }
 
 @main
 struct WorkersWidget: Widget {
     var body: some WidgetConfiguration {
-        AppIntentConfiguration(kind: WorkersTelemetry.widgetKind, intent: WorkersWidgetIntent.self, provider: WorkersProvider()) { entry in
+        StaticConfiguration(kind: WorkersTelemetry.widgetKind, provider: WorkersProvider()) { entry in
             WorkersWidgetView(entry: entry)
         }
         .configurationDisplayName("Workers")
-        .description("CPU, GPU, SSD e RAM dos workers Ubuntu, com temperaturas, ventoinha e processos.")
+        .description("CPU, GPU, SSD e RAM do Mac e dos workers. Clique num cartão para escolher o PC e o apelido.")
         .supportedFamilies([.systemMedium, .systemLarge, .systemExtraLarge])
     }
 }
@@ -61,7 +67,8 @@ struct WorkersWidgetView: View {
                     ForEach(Array(stride(from: 0, to: workers.count, by: columns)), id: \.self) { start in
                         GridRow {
                             ForEach(workers[start..<min(start + columns, workers.count)]) { worker in
-                                WorkerCard(worker: worker, now: entry.date, compact: family == .systemMedium)
+                                let card = WorkerCard(worker: worker, now: entry.date, compact: family == .systemMedium)
+                                if let position = worker.position { Link(destination: WorkersLink.url(position: position)) { card } } else { card }
                             }
                         }
                     }
@@ -119,24 +126,26 @@ struct WorkerCard: View {
         .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(.background.opacity(0.35)))
     }
 
-    /// Processos e hora da leitura. No médio, só o maior processo, na mesma linha da hora, para caber em altura.
+    /// Processos, hora da leitura e, à direita da hora, as sessões do Claude. No médio, só o maior processo, para caber em altura.
     @ViewBuilder private var footer: some View {
-        let time = Text(WorkerFormat.time(worker.sampledAt)).font(.system(size: 9).monospacedDigit()).foregroundStyle(.secondary)
         let processes = reading?.topProcesses ?? []
         let gpu = reading?.topGPU
+        let timeLine = HStack(spacing: 4) {
+            Text(WorkerFormat.time(worker.sampledAt)).monospacedDigit()
+            Spacer(minLength: 2)
+            if let reading { Text("Claude \(WorkerFormat.count(reading.claude_sessoes))").monospacedDigit() }
+        }
+        .font(.system(size: 9)).foregroundStyle(.secondary)
         VStack(alignment: .leading, spacing: 0) {
             if compact {
-                HStack(spacing: 4) {
-                    if let top = processes.first { process("cpu", top.nome ?? WorkerFormat.missing, WorkerFormat.percent(top.cpu)) }
-                    Spacer(minLength: 2); time
-                }
+                if let top = processes.first { process("cpu", top.nome ?? WorkerFormat.missing, WorkerFormat.percent(top.cpu)) }
             } else {
                 ForEach(Array(processes.enumerated()), id: \.offset) { _, p in
                     process("cpu", p.nome ?? WorkerFormat.missing, WorkerFormat.percent(p.cpu))
                 }
                 if let gpu { process("cube", gpu.nome ?? WorkerFormat.missing, WorkerFormat.megabytesAsGB(gpu.vram_mb)) }
-                time.padding(.top, 2)
             }
+            timeLine.padding(.top, compact ? 0 : 2)
         }
     }
 
@@ -148,8 +157,10 @@ struct WorkerCard: View {
         Grid(alignment: .leading, horizontalSpacing: 5, verticalSpacing: 1) {
             row("CPU", [WorkerFormat.percent(r.cpu?.uso), WorkerFormat.temperature(r.cpu?.temp)] + (compact ? [] : ["load \(WorkerFormat.load(r.cpu?.load1))"]))
             if let gpu = r.gpu {
-                let base = [WorkerFormat.percent(gpu.uso), WorkerFormat.temperature(gpu.temp), WorkerFormat.watts(gpu.watts)]
-                row("GPU", base + [WorkerFormat.vram(used: gpu.vram_mb, total: gpu.vram_total_mb)], fallback: base)
+                // Fonte sem watts nem VRAM (o Mac, sem root) omite os dois em vez de mostrar "— —".
+                let reportsPower = gpu.watts != nil || gpu.vram_total_mb != nil
+                let base = [WorkerFormat.percent(gpu.uso), WorkerFormat.temperature(gpu.temp)] + (reportsPower ? [WorkerFormat.watts(gpu.watts)] : [])
+                row("GPU", base + (reportsPower ? [WorkerFormat.vram(used: gpu.vram_mb, total: gpu.vram_total_mb)] : []), fallback: base)
             } else {
                 row("GPU", ["sem GPU"], secondary: true)
             }
@@ -158,8 +169,7 @@ struct WorkerCard: View {
             row("RAM", ["\(WorkerFormat.gigabytes(r.ram?.usada_gb))/\(WorkerFormat.gigabytes(r.ram?.displayTotal)) GB"] + (compact ? [] : ["swap \(WorkerFormat.gigabytes(r.ram?.swap_gb)) GB"]))
             GridRow {
                 Image(systemName: "fan").font(.system(size: 8, weight: .semibold)).foregroundStyle(.secondary)
-                Text("\(WorkerFormat.fans(r.ventoinhas_rpm))   Claude \(WorkerFormat.count(r.claude_sessoes))")
-                    .font(.system(size: 10).monospacedDigit()).lineLimit(1).minimumScaleFactor(0.8)
+                Text(WorkerFormat.fans(r.ventoinhas_rpm)).font(.system(size: 10).monospacedDigit()).lineLimit(1)
             }
         }
     }

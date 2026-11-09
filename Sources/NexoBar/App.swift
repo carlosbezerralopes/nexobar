@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Darwin
+import WorkersTelemetry
 
 private actor HardwareSampler {
     private lazy var source = HardwareSensors()
@@ -227,6 +228,7 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSPopoverDeleg
     private let workersWidget = WorkersWidgetReloader()
     private var popover = NSPopover()
     private var settingsWindow: NSWindow?
+    private var workerWindow: NSWindow?
     private let strip = StatusStrip(frame: .zero)
     private var selectedID: IndicatorID?
     private var contextID: IndicatorID?
@@ -252,6 +254,8 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSPopoverDeleg
         source.setEventHandler { NSApp.terminate(nil) }
         source.resume(); terminationSignal = source
         NSApp.setActivationPolicy(.accessory)
+        NSAppleEventManager.shared().setEventHandler(self, andSelector: #selector(handleURLEvent(_:withReplyEvent:)),
+                                                     forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
         let arguments = CommandLine.arguments
         diagnosePresentation = arguments.contains("--diagnose-presentation")
         let directory: URL
@@ -278,6 +282,12 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSPopoverDeleg
         dashboard.onChange = { [weak self] in self?.renderBar() }
         dashboard.onQuotaReset = { [weak self] event in self?.enqueueReset(event) }
         dashboard.start()
+        workersWidget.hardware = { [weak self] in
+            let readings = self?.dashboard.readings ?? [:]
+            return MacTelemetry.Hardware(cpu: readings[.cpu]?.numericValue, cpuTemperature: readings[.cpuTemperature]?.numericValue,
+                                         gpu: readings[.gpu]?.numericValue, gpuTemperature: readings[.gpuTemperature]?.numericValue,
+                                         memoryUsedBytes: readings[.memory]?.usedBytes)
+        }
         workersWidget.start()
         renderBar()
         if arguments.contains("--settings") { openSettings() }
@@ -508,6 +518,47 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSPopoverDeleg
             guard let self, let panel, self.resetPanel === panel else { return }
             panel.close(); self.resetPanel = nil; self.showNextReset()
         }
+    }
+
+    /// Clique num cartão do widget: nexobar://workers/posicao/<n>. O handler de Apple Event é explícito porque o
+    /// `application(_:open:)` não recebeu o URL com o NSApplication montado à mão no `main`.
+    @objc private func handleURLEvent(_ event: NSAppleEventDescriptor, withReplyEvent reply: NSAppleEventDescriptor) {
+        guard let text = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue, let url = URL(string: text) else { return }
+        openURLs([url])
+    }
+
+    private func openURLs(_ urls: [URL]) {
+        for url in urls where url.scheme == "nexobar" && url.host == "workers" {
+            let parts = url.pathComponents.filter { $0 != "/" }
+            if parts.count == 2, parts[0] == "posicao", let position = Int(parts[1]), (0..<WidgetLayoutConfig.positions).contains(position) {
+                openWorkerPosition(position)
+            }
+        }
+    }
+
+    private func openWorkerPosition(_ position: Int) {
+        workerWindow?.close()
+        let config = WidgetLayoutConfig.load()
+        let shown = WorkersLayout.arrange(WorkersTelemetry.loadAll(), config: config)
+        let current = shown.first { $0.position == position }?.id
+        let options = shown.sorted { $0.id < $1.id }.map { (id: $0.id, name: WorkerSnapshot.defaultName(id: $0.id, host: $0.reading?.host)) }
+        let selected = config.ordem.indices.contains(position) ? config.ordem[position] ?? "" : ""
+        let window = NSWindow(contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.title = "Posição \(position + 1) do widget"
+        window.isReleasedWhenClosed = false
+        window.contentView = NSHostingView(rootView: WorkerPositionView(
+            position: position, options: options, selected: selected,
+            nickname: config.apelidos[selected.isEmpty ? (current ?? "") : selected] ?? "", config: config,
+            onSave: { [weak self, weak window] value in
+                try? value.save()
+                self?.workersWidget.reload()
+                window?.close()
+            },
+            onCancel: { [weak window] in window?.close() }))
+        window.center()
+        workerWindow = window
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     private func openSettings() {

@@ -4,7 +4,7 @@ Execute os comandos na raiz do código-fonte. Os builds usam diretórios tempor�
 
 ## macOS
 
-Requisitos: macOS 14+, Xcode (toolchain Swift 6 e extrator de App Intents do widget) e PowerShell 7. O pacote padrão usa a arquitetura do host; o preview distribuível atual é arm64.
+Requisitos: macOS 14+, toolchain Swift 6 e PowerShell 7. O pacote padrão usa a arquitetura do host; o preview distribuível atual é arm64.
 
 ```powershell
 pwsh -NoProfile -File scripts/build.ps1

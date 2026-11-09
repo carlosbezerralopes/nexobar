@@ -54,8 +54,10 @@ public struct WorkerSnapshot: Equatable, Sendable, Identifiable {
     public var id: String
     public var reading: WorkerReading?
     public var connection: WorkerConnection?
-    /// Apelido escolhido no editor do widget.
+    /// Apelido escolhido ao clicar no cartão.
     public var nickname: String?
+    /// Posição do widget que o cartão ocupa (o clique edita essa posição); nil fora das quatro posições.
+    public var position: Int?
 
     public init(id: String, reading: WorkerReading?, connection: WorkerConnection?, nickname: String? = nil) {
         self.id = id; self.reading = reading; self.connection = connection; self.nickname = nickname
@@ -63,7 +65,12 @@ public struct WorkerSnapshot: Equatable, Sendable, Identifiable {
 
     public var displayName: String {
         if let nickname = nickname?.trimmingCharacters(in: .whitespacesAndNewlines), !nickname.isEmpty { return nickname }
-        return id.hasPrefix("worker-") ? String(id.dropFirst(7)) : id
+        return Self.defaultName(id: id, host: reading?.host)
+    }
+    /// Nome sem apelido: worker sem o prefixo "worker-"; o Mac, pelo nome do computador.
+    public static func defaultName(id: String, host: String?) -> String {
+        if id.hasPrefix("worker-") { return String(id.dropFirst(7)) }
+        return host ?? id
     }
     /// Momento em que o Mac recebeu a leitura; sem ele, a hora do worker.
     public var receivedAt: Date? { (reading?.recebido ?? reading?.ts).map { Date(timeIntervalSince1970: $0) } }
@@ -95,10 +102,21 @@ public enum WorkersTelemetry {
         return directory.appendingPathComponent(worker, isDirectory: true).appendingPathComponent(name)
     }
 
+    /// Pasta do NexoBar lida pelo widget: leitura do próprio Mac (`mac.json`) e a escolha de posições e apelidos.
+    public static var appDirectory: URL {
+        defaultDirectory.deletingLastPathComponent().appendingPathComponent("NexoBar/widget-workers", isDirectory: true)
+    }
+    public static let macID = "mac"
+
+    /// Workers do coletor e o Mac, gravado pelo NexoBar no mesmo formato.
+    public static func loadAll(workers: URL = defaultDirectory, app: URL = appDirectory) -> [WorkerSnapshot] {
+        load(directory: workers).filter { $0.id != macID } + load(directory: app).filter { $0.id == macID }
+    }
+
     public static func load(directory: URL = defaultDirectory) -> [WorkerSnapshot] {
         let files = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
         var ids = Set<String>()
-        for file in files where file.hasSuffix(".json") {
+        for file in files where file.hasSuffix(".json") && file != WidgetLayoutConfig.fileName {
             ids.insert(file.hasSuffix(".estado.json") ? String(file.dropLast(12)) : String(file.dropLast(5)))
         }
         let decoder = JSONDecoder()
@@ -115,6 +133,7 @@ public enum WorkersTelemetry {
     }
 
     /// Assinatura do que o widget mostra, para o app só pedir recarga quando algo mudou.
+    public static func signature(directories: [URL]) -> String { directories.map { signature(directory: $0) }.joined(separator: "#") }
     public static func signature(directory: URL = defaultDirectory) -> String {
         let files = ((try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []).filter { $0.hasSuffix(".json") }.sorted()
         return files.map { name -> String in
@@ -125,20 +144,64 @@ public enum WorkersTelemetry {
     }
 }
 
-/// Ordem e apelidos escolhidos no editor do widget.
+/// Escolhas feitas ao clicar num cartão do widget: o PC de cada posição e o apelido de cada PC.
+public struct WidgetLayoutConfig: Codable, Equatable, Sendable {
+    public static let fileName = "posicoes.json"
+    public static let positions = 4
+    /// PC escolhido em cada posição; nil deixa a posição no automático.
+    public var ordem: [String?]
+    /// Apelido por PC, não por posição: acompanha o PC se ele mudar de lugar.
+    public var apelidos: [String: String]
+
+    public init(ordem: [String?] = Array(repeating: nil, count: positions), apelidos: [String: String] = [:]) {
+        self.ordem = Array((ordem + Array(repeating: nil, count: Self.positions)).prefix(Self.positions)); self.apelidos = apelidos
+    }
+
+    public static func load(directory: URL = WorkersTelemetry.appDirectory) -> WidgetLayoutConfig {
+        guard let data = try? Data(contentsOf: directory.appendingPathComponent(fileName)),
+              let value = try? JSONDecoder().decode(Self.self, from: data) else { return Self() }
+        return Self(ordem: value.ordem, apelidos: value.apelidos)
+    }
+
+    public func save(directory: URL = WorkersTelemetry.appDirectory) throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(self).write(to: directory.appendingPathComponent(Self.fileName), options: .atomic)
+    }
+
+    /// Põe `worker` na posição; se ele já estava em outra, as duas trocam. Apelido vazio volta ao nome original.
+    public mutating func assign(position: Int, worker: String?, nickname: String?) {
+        guard ordem.indices.contains(position) else { return }
+        if let worker, let other = ordem.firstIndex(of: worker), other != position { ordem[other] = ordem[position] }
+        ordem[position] = worker
+        if let worker {
+            let trimmed = nickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            apelidos[worker] = trimmed.isEmpty ? nil : trimmed
+        }
+    }
+}
+
+/// Monta os cartões na ordem das posições.
 public enum WorkersLayout {
-    /// O apelido pertence ao worker escolhido na mesma posição; apelido em posição sem worker é ignorado. Os escolhidos vêm
-    /// primeiro, na ordem das posições; os demais depois, em ordem alfabética e com o nome original. Worker repetido aparece
-    /// só na primeira posição; worker escolhido que sumiu da pasta continua visível como sem leitura.
-    public static func arrange(_ workers: [WorkerSnapshot], slots: [(id: String?, nickname: String?)]) -> [WorkerSnapshot] {
-        var remaining = workers.sorted { $0.id < $1.id }
+    /// Cada posição mostra o PC escolhido nela ou, no automático, o próximo ainda não mostrado: o Mac primeiro, depois os
+    /// workers em ordem alfabética. Cada cartão leva a posição que o clique edita. PC escolhido que sumiu continua
+    /// visível como sem leitura; os apelidos valem para o PC onde ele estiver.
+    public static func arrange(_ workers: [WorkerSnapshot], config: WidgetLayoutConfig) -> [WorkerSnapshot] {
+        func rank(_ w: WorkerSnapshot) -> (Int, String) { (w.id == WorkersTelemetry.macID ? 0 : 1, w.id) }
+        var remaining = workers.sorted { rank($0) < rank($1) }
+        let chosen = Set(config.ordem.compactMap { $0 })
         var result: [WorkerSnapshot] = []
-        for case let (id?, nickname) in slots where !result.contains(where: { $0.id == id }) {
-            var worker = remaining.firstIndex { $0.id == id }.map { remaining.remove(at: $0) } ?? WorkerSnapshot(id: id, reading: nil, connection: nil)
-            worker.nickname = nickname
+        for (position, slot) in config.ordem.enumerated() {
+            var worker: WorkerSnapshot
+            if let id = slot, !result.contains(where: { $0.id == id }) {
+                worker = remaining.firstIndex { $0.id == id }.map { remaining.remove(at: $0) } ?? WorkerSnapshot(id: id, reading: nil, connection: nil)
+            } else if let index = remaining.firstIndex(where: { !chosen.contains($0.id) }) {
+                worker = remaining.remove(at: index)
+            } else { continue }
+            worker.position = position
             result.append(worker)
         }
-        return result + remaining
+        return (result + remaining).map { var w = $0; w.nickname = config.apelidos[w.id]; return w }
     }
 }
 

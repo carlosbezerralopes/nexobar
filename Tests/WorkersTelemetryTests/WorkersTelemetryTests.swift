@@ -132,29 +132,50 @@ final class WorkersTelemetryTests: XCTestCase {
 }
 
 final class WorkersLayoutTests: XCTestCase {
-    private func worker(_ id: String, fresh: Bool) -> WorkerSnapshot {
-        var reading = WorkerReading(); reading.recebido = fresh ? 1000 : 0
+    private func worker(_ id: String, fresh: Bool = true) -> WorkerSnapshot {
+        var reading = WorkerReading(); reading.recebido = fresh ? 1000 : 0; reading.host = id == "mac" ? "MacBook Pro" : id
         return WorkerSnapshot(id: id, reading: reading, connection: nil)
     }
+    private let all = ["worker-c", "mac", "worker-a", "worker-b"]
 
-    func testNicknameWithoutWorkerIsIgnoredAndOrderIsAlphabetical() {
-        let all = [worker("worker-c", fresh: true), worker("worker-a", fresh: false), worker("worker-b", fresh: true)]
-        let result = WorkersLayout.arrange(all, slots: [(nil, "Note"), (nil, nil)])
-        XCTAssertEqual(result.map(\.id), ["worker-a", "worker-b", "worker-c"])
-        XCTAssertEqual(result.map(\.displayName), ["a", "b", "c"])
+    func testAutomaticOrderPutsTheMacFirstThenWorkersAlphabetically() {
+        let result = WorkersLayout.arrange(all.map { worker($0) }, config: WidgetLayoutConfig())
+        XCTAssertEqual(result.map(\.id), ["mac", "worker-a", "worker-b", "worker-c"])
+        XCTAssertEqual(result.map(\.position), [0, 1, 2, 3])
+        XCTAssertEqual(result.map(\.displayName), ["MacBook Pro", "a", "b", "c"])
     }
 
-    func testChosenWorkersComeFirstWithTheirNicknamesAndTheRestFollowWithOwnNames() {
-        let all = [worker("worker-a", fresh: true), worker("worker-b", fresh: true), worker("worker-c", fresh: true)]
-        let result = WorkersLayout.arrange(all, slots: [("worker-c", " GPU "), (nil, "ignorado"), ("worker-c", "dup"), ("worker-b", "")])
-        XCTAssertEqual(result.map(\.id), ["worker-c", "worker-b", "worker-a"])
-        XCTAssertEqual(result.map(\.displayName), ["GPU", "b", "a"])
+    func testChosenPositionsAndNicknamesFollowThePC() {
+        var config = WidgetLayoutConfig()
+        config.assign(position: 0, worker: "worker-c", nickname: " GPU ")
+        config.assign(position: 2, worker: "mac", nickname: "")
+        let result = WorkersLayout.arrange(all.map { worker($0) }, config: config)
+        XCTAssertEqual(result.map(\.id), ["worker-c", "worker-a", "mac", "worker-b"])
+        XCTAssertEqual(result.map(\.displayName), ["GPU", "a", "MacBook Pro", "b"])
+        config.assign(position: 3, worker: "worker-c", nickname: "GPU")
+        XCTAssertEqual(config.ordem, [nil, nil, "mac", "worker-c"], "escolher um PC já posicionado troca as posições")
+        XCTAssertEqual(WorkersLayout.arrange(all.map { worker($0) }, config: config).last?.displayName, "GPU")
     }
 
-    func testChosenWorkerMissingFromFolderStaysVisibleWithoutReading() {
-        let result = WorkersLayout.arrange([], slots: [("worker-z", "Desk"), (nil, "nada")])
-        XCTAssertEqual(result.map(\.displayName), ["Desk"])
-        XCTAssertNil(result[0].reading)
-        XCTAssertTrue(result[0].isStale(at: Date(timeIntervalSince1970: 0)))
+    func testChosenPCMissingFromFolderStaysVisibleWithoutReading() {
+        var config = WidgetLayoutConfig(); config.assign(position: 1, worker: "worker-z", nickname: "Desk")
+        let result = WorkersLayout.arrange([worker("mac")], config: config)
+        XCTAssertEqual(result.map(\.displayName), ["MacBook Pro", "Desk"])
+        XCTAssertEqual(result.map(\.position), [0, 1])
+        XCTAssertNil(result[1].reading)
+    }
+
+    func testConfigRoundTripsAndLoadAllAddsTheMacFromTheAppFolder() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("NexoBar/layout-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let workers = root.appendingPathComponent("workers"), app = root.appendingPathComponent("app")
+        var config = WidgetLayoutConfig(); config.assign(position: 1, worker: "mac", nickname: "Mac")
+        try config.save(directory: app)
+        XCTAssertEqual(WidgetLayoutConfig.load(directory: app), config)
+        XCTAssertEqual(WidgetLayoutConfig.load(directory: workers), WidgetLayoutConfig(), "sem arquivo, tudo automático")
+        try FileManager.default.createDirectory(at: workers, withIntermediateDirectories: true)
+        try Data(#"{"v":1,"recebido":1}"#.utf8).write(to: workers.appendingPathComponent("worker-a.json"))
+        try Data(#"{"v":1,"host":"Mac","recebido":1}"#.utf8).write(to: app.appendingPathComponent("mac.json"))
+        XCTAssertEqual(WorkersTelemetry.loadAll(workers: workers, app: app).map(\.id), ["worker-a", "mac"], "posicoes.json não vira cartão")
     }
 }
