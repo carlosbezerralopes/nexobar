@@ -14,7 +14,7 @@ Widget WidgetKit (**NexoBar Workers**) que mostra, na mesa do Mac, a telemetria 
 
 ## Comportamento
 
-- Um cartão por worker, na ordem CPU · GPU · SSD · RAM, com temperaturas, watts da GPU, ventoinha e sessões do Claude, os três processos que mais usam CPU (só o maior no tamanho médio) e o maior processo na GPU, quando houver. VRAM e taxas do SSD só aparecem quando cabem na linha.
+- Um cartão por worker, na ordem CPU · GPU · SSD · RAM, com temperaturas, watts da GPU, ventoinha e sessões do Claude, os três processos que mais usam CPU, só os que arredondam para 1% ou mais (só o maior no tamanho médio; % do `top`, em que 100% é um núcleo) e o maior processo na GPU, quando houver. VRAM e taxas do SSD só aparecem quando cabem na linha.
 - A hora da leitura fica sempre visível, na última linha do cartão, para o apelido ocupar a largura do cabeçalho. Leitura recebida há mais de 60 s, worker desconectado ou conectando aparece esmaecido como desatualizado. A timeline já traz a entrada em que cada cartão expira, sem depender de recarga.
 - Ausência não é zero: campo sem leitura aparece como "—"; worker sem NVIDIA mostra "sem GPU".
 - Tamanhos: médio (2 cartões, sem load/watts/swap), grande (até 4) e extragrande (até 4 lado a lado).

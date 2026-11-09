@@ -38,8 +38,10 @@ public struct WorkerReading: Codable, Equatable, Sendable {
     public var claude_sessoes: Int?
 
     public var topCPU: Process? { topProcesses.first }
-    /// Até três processos com mais CPU, do maior para o menor.
-    public var topProcesses: [Process] { Array((top_cpu ?? []).sorted { ($0.cpu ?? -1) > ($1.cpu ?? -1) }.prefix(3)) }
+    /// Até três processos com mais CPU, do maior para o menor; só os que arredondam para 1% ou mais.
+    public var topProcesses: [Process] {
+        Array((top_cpu ?? []).filter { ($0.cpu ?? 0).rounded() >= 1 }.sorted { ($0.cpu ?? -1) > ($1.cpu ?? -1) }.prefix(3))
+    }
     public var topGPU: GPUProcess? { gpu?.processos?.max { ($0.vram_mb ?? -1) < ($1.vram_mb ?? -1) } }
 }
 

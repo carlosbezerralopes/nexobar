@@ -29,7 +29,12 @@ final class WorkersTelemetryTests: XCTestCase {
         XCTAssertEqual(gpu.displayName, "gpu")
         XCTAssertEqual(gpu.reading?.topCPU?.nome, "ffmpeg")
         XCTAssertEqual(gpu.reading?.topGPU?.nome, "comfy")
-        XCTAssertEqual(gpu.reading?.topProcesses.map(\.nome), ["ffmpeg", "systemd"])
+        XCTAssertEqual(gpu.reading?.topProcesses.map(\.nome), ["ffmpeg"], "0% depois de arredondar não aparece")
+        var reading = gpu.reading!
+        reading.top_cpu = [.init(pid: 1, cpu: 0.4, ram_mb: nil, nome: "a", cmd: nil), .init(pid: 2, cpu: 0.5, ram_mb: nil, nome: "b", cmd: nil),
+                           .init(pid: 3, cpu: 3, ram_mb: nil, nome: "c", cmd: nil), .init(pid: 4, cpu: 2, ram_mb: nil, nome: "d", cmd: nil),
+                           .init(pid: 5, cpu: 1, ram_mb: nil, nome: "e", cmd: nil)]
+        XCTAssertEqual(reading.topProcesses.map(\.nome), ["c", "d", "e"])
         XCTAssertEqual(gpu.reading?.ram?.displayTotal, 32, "total exibido é a RAM instalada")
         XCTAssertNil(gpu.reading?.gpu_intel)
         XCTAssertEqual(workers[0].reading?.gpu_intel?.ativo, 7)
