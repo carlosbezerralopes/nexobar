@@ -59,6 +59,9 @@ final class Dashboard: ObservableObject {
     var onQuotaReset: ((AIQuotaResetEvent) -> Void)?
     private let resetWatcher = AIQuotaResetWatcher()
     private let monitor = MachineMonitor()
+    private let ssd = SSDMonitor()
+    /// Last hardware model seen per indicator; kept when a later reading is unavailable.
+    private(set) var hardwareNames: [IndicatorID: String] = [:]
     private let providers: AIProviders
     private let hardware = HardwareSampler()
     private let activity = ActivitySampler()
@@ -86,7 +89,7 @@ final class Dashboard: ObservableObject {
         appearance = (try? JSONDecoder().decode(BarAppearance.self, from: Data(contentsOf: appearanceURL))) ?? BarAppearance()
         if let data = try? Data(contentsOf: settingsURL),
            let saved = try? JSONDecoder().decode([IndicatorConfiguration].self, from: data) {
-            items = IndicatorConfiguration.normalized(saved)
+            items = IndicatorConfiguration.migrated(saved)
         } else {
             items = IndicatorConfiguration.defaults
         }
@@ -127,6 +130,7 @@ final class Dashboard: ObservableObject {
             if let previous = history[id] { history[id] = MetricHistory.updated(previous, now: now) }
         }
         for reading in monitor.sample() where reading.id == .cpu || reading.id == .memory { applyMetric(reading) }
+        if items.contains(where: { $0.id == .ssd && $0.enabled }) { applyMetric(ssd.sample()) }
         onChange?()
         guard !hardwareBusy else { return }
         hardwareBusy = true
@@ -140,6 +144,7 @@ final class Dashboard: ObservableObject {
 
     private func applyMetric(_ reading: IndicatorReading) {
         readings[reading.id] = reading
+        if let name = reading.hardwareName { hardwareNames[reading.id] = name }
         history[reading.id] = MetricHistory.updated(history[reading.id] ?? [], reading: reading, now: Date())
     }
 
@@ -188,7 +193,7 @@ final class Dashboard: ObservableObject {
         guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
         let becameVisible = item.enabled && !items[index].enabled
         var replacement = item
-        replacement.label = String(replacement.label.prefix(24))
+        replacement.label = String(replacement.label.prefix(IndicatorConfiguration.maximumLabelLength))
         items[index] = replacement
         save()
         if becameVisible && item.id.isAI { refreshAI(id: item.id) }
@@ -199,6 +204,22 @@ final class Dashboard: ObservableObject {
         guard let index = visibleOrder.firstIndex(where: { $0.element.id == id }), visibleOrder.indices.contains(index + offset) else { return }
         items.swapAt(visibleOrder[index].offset, visibleOrder[index + offset].offset)
         save()
+    }
+
+    /// ↺ next to the name: hardware indicators alternate between the short name and the model the
+    /// hardware reports; others return to the official name.
+    func alternateLabel(for id: IndicatorID) -> String? {
+        guard let item = items.first(where: { $0.id == id }) else { return nil }
+        if let hardware = hardwareNames[id], item.label != hardware { return String(hardware.prefix(IndicatorConfiguration.maximumLabelLength)) }
+        return item.label == id.name ? nil : id.name
+    }
+    func restoreLabel(_ id: IndicatorID) {
+        guard var item = items.first(where: { $0.id == id }), let label = alternateLabel(for: id) else { return }
+        item.label = label; update(item)
+    }
+    func toggleSSDOption(_ keyPath: WritableKeyPath<IndicatorConfiguration, Bool>) {
+        guard var item = items.first(where: { $0.id == .ssd }) else { return }
+        item[keyPath: keyPath].toggle(); update(item)
     }
 
     func toggleTemperature(_ owner: IndicatorID) {
@@ -425,27 +446,37 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSPopoverDeleg
         if !strip.hiddenIDs.isEmpty {
             for hiddenID in strip.hiddenIDs {
                 let config = dashboard.items.first(where: { $0.id == hiddenID })
-                let value = dashboard.readings[hiddenID]?.displayValue(memory: config?.memoryDisplay ?? .usedTotal) ?? "—"
+                let value = config.flatMap { item in dashboard.readings[hiddenID]?.barValue(item: item, temperature: nil) } ?? "—"
                 let item = add("\(config?.label ?? hiddenID.name) · \(value)", #selector(openOverflowDetail(_:)))
                 item.representedObject = hiddenID.rawValue
             }
             menu.addItem(.separator())
         }
         _ = add("Personalizar barra…", #selector(contextSettings))
-        for owner in [IndicatorID.cpu, .gpu] {
-            let parent = NSMenuItem(title: owner.name, action: nil, keyEquivalent: "")
+        for owner in [IndicatorID.cpu, .gpu, .ssd] {
+            let parent = NSMenuItem(title: dashboard.items.first(where: { $0.id == owner })?.label ?? owner.name, action: nil, keyEquivalent: "")
             let submenu = NSMenu()
             let temperature = NSMenuItem(title: "Mostrar temperatura", action: #selector(toggleTemperature(_:)), keyEquivalent: "")
             temperature.target = self; temperature.representedObject = owner.rawValue
             temperature.state = dashboard.items.first(where: { $0.id == owner.temperatureChild })?.enabled == true ? .on : .off
-            submenu.addItem(temperature); parent.submenu = submenu; menu.addItem(parent)
+            submenu.addItem(temperature)
+            if owner == .ssd, let ssd = dashboard.items.first(where: { $0.id == .ssd }) {
+                let rates = NSMenuItem(title: "Mostrar leitura/escrita", action: #selector(toggleSSDRates), keyEquivalent: "")
+                rates.target = self; rates.state = ssd.showRates ? .on : .off; submenu.addItem(rates)
+                let free = NSMenuItem(title: "Mostrar espaço livre", action: #selector(toggleSSDFreeSpace), keyEquivalent: "")
+                free.target = self; free.state = ssd.showFreeSpace ? .on : .off; submenu.addItem(free)
+            }
+            parent.submenu = submenu; menu.addItem(parent)
         }
         let horizontal = add("Limites de IA: horizontal", #selector(useHorizontal))
         horizontal.state = dashboard.appearance.quotaLayout == .inline ? .on : .off
         let stacked = add("Limites de IA: duas linhas", #selector(useStacked))
         stacked.state = dashboard.appearance.quotaLayout == .stacked ? .on : .off
+        let reset = add("Mostrar tempo até renovar", #selector(toggleQuotaReset))
+        reset.state = dashboard.appearance.showQuotaReset ? .on : .off
         let detail = add("Detalhar tempo restante", #selector(toggleDetailedTime))
         detail.state = dashboard.appearance.detailedTime ? .on : .off
+        if !dashboard.appearance.showQuotaReset { detail.action = nil }
         let notify = add("Avisar quando a cota renovar", #selector(toggleResetNotices))
         notify.state = dashboard.appearance.notifyResets ? .on : .off
         menu.addItem(.separator())
@@ -471,6 +502,9 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSPopoverDeleg
     }
     @objc private func useHorizontal() { var value = dashboard.appearance; value.quotaLayout = .inline; dashboard.updateAppearance(value) }
     @objc private func useStacked() { var value = dashboard.appearance; value.quotaLayout = .stacked; dashboard.updateAppearance(value) }
+    @objc private func toggleSSDRates() { dashboard.toggleSSDOption(\.showRates) }
+    @objc private func toggleSSDFreeSpace() { dashboard.toggleSSDOption(\.showFreeSpace) }
+    @objc private func toggleQuotaReset() { var value = dashboard.appearance; value.showQuotaReset.toggle(); dashboard.updateAppearance(value) }
     @objc private func toggleDetailedTime() { var value = dashboard.appearance; value.detailedTime.toggle(); dashboard.updateAppearance(value) }
     @objc private func toggleResetNotices() { var value = dashboard.appearance; value.notifyResets.toggle(); dashboard.updateAppearance(value) }
     @objc private func refreshContext() { if let contextID { dashboard.refreshAI(id: contextID) } }
@@ -574,9 +608,10 @@ enum NexoBarMain {
         if CommandLine.arguments.contains("--diagnose") {
             let monitor = MachineMonitor()
             let hardware = HardwareSensors()
-            _ = monitor.sample()
+            let ssd = SSDMonitor()
+            _ = monitor.sample(); _ = ssd.sample()
             try? await Task.sleep(nanoseconds: 1_000_000_000)
-            for reading in monitor.sample().filter({ $0.id == .cpu || $0.id == .memory }) + hardware.sample() {
+            for reading in monitor.sample().filter({ $0.id == .cpu || $0.id == .memory }) + [ssd.sample()] + hardware.sample() {
                 print("\(reading.id.rawValue): \(reading.value) | \(reading.detail)")
             }
             return

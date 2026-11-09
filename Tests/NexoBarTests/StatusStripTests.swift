@@ -125,7 +125,7 @@ final class StatusStripTests: XCTestCase {
             let memory = IndicatorConfiguration(id: .memory, enabled: true, label: "Memória", memoryDisplay: .usedTotal)
             let bytes = IndicatorReading(id: .memory, value: "50%", detail: "", sampledAt: Date(), usedBytes: 8 * 1_073_741_824, totalBytes: 16 * 1_073_741_824)
             strip.update(items: [memory], readings: [.memory: bytes], appearance: BarAppearance())
-            XCTAssertEqual(strip.subviews[0].accessibilityValue() as? String, "8/16 GiB")
+            XCTAssertEqual(strip.subviews[0].accessibilityValue() as? String, "8/16 GB")
         }
     }
 
@@ -293,8 +293,8 @@ final class StatusStripTests: XCTestCase {
             strip.update(items: items, readings: readings, appearance: BarAppearance())
             let buttons = strip.subviews.sorted { $0.frame.minX < $1.frame.minX }
             XCTAssertEqual(buttons.map { $0.identifier?.rawValue }, ["cpu", "memory", "gpu"])
-            XCTAssertEqual(buttons[0].accessibilityValue() as? String, "42% · 65°C")
-            XCTAssertEqual(buttons[2].accessibilityValue() as? String, "18% · —")
+            XCTAssertEqual(buttons[0].accessibilityValue() as? String, "42%\u{2009}·\u{2009}65°C")
+            XCTAssertEqual(buttons[2].accessibilityValue() as? String, "18%\u{2009}·\u{2009}—")
             XCTAssertTrue(buttons[2].toolTip?.contains("Sensor GPU indisponível") == true)
             var clicked: IndicatorID?
             strip.onSelect = { id, _ in clicked = id }

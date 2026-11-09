@@ -323,7 +323,7 @@ private final class StatusIndicatorButton: NSButton {
                 rows = [text(prefix + "—", percent: nil, stale: stale, size: 11)]
             } else {
                 let parts = displayedWindows.enumerated().map { index, window in
-                    let remaining = window.resetsAt.map { "·" + QuotaBarPresentation.remainingTime(reset: $0, now: now, detailedTime: detailedTime) } ?? ""
+                    let remaining = appearance.showQuotaReset ? window.resetsAt.map { BarText.separator + QuotaBarPresentation.remainingTime(reset: $0, now: now, detailedTime: detailedTime) } ?? "" : ""
                     return text((index == 0 ? prefix : "") + QuotaBarPresentation.value(for: window) + remaining,
                                 percent: window.usedPercent, stale: stale, size: stacked ? 9 : 11)
                 }
@@ -338,15 +338,14 @@ private final class StatusIndicatorButton: NSButton {
                 }
             }
         } else {
-            let value = reading.displayValue(memory: item.memoryDisplay)
+            // Same order as Windows: value · read/write · temperature · free space.
             let percent = Double(reading.value.replacingOccurrences(of: "%", with: ""))
-            rows = [text(prefix + value, percent: percent, stale: stale, size: 11)]
-        }
-        if let childReading {
-            let grouped = NSMutableAttributedString(attributedString: rows[0])
-            grouped.append(text(" · " + childReading.value.replacingOccurrences(of: " ", with: ""), percent: nil,
-                                stale: childReading.isStale, size: 11))
-            rows[0] = grouped
+            let line = NSMutableAttributedString(attributedString: text(prefix + reading.displayValue(memory: item.memoryDisplay), percent: percent, stale: stale, size: 11))
+            func append(_ part: String, stale partStale: Bool) { line.append(text(BarText.separator + part, percent: nil, stale: partStale, size: 11)) }
+            if item.showRates, let rates = reading.ratesText { append(rates, stale: stale) }
+            if let childReading { append(childReading.value.replacingOccurrences(of: " ", with: ""), stale: childReading.isStale) }
+            if item.showFreeSpace, let free = reading.freeSpaceText { append(free, stale: stale) }
+            rows = [line]
         }
         func quotaDescription(_ window: QuotaWindow?, name: String) -> String {
             "\(name): \(QuotaBarPresentation.value(for: window)) · renova em \(QuotaBarPresentation.remainingTime(reset: window?.resetsAt, now: now, detailedTime: true))"

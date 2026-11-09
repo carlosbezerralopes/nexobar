@@ -83,11 +83,13 @@ final class MachineMonitor {
             let gib = bytes / 1_073_741_824
             let totalGiB = Double(snapshot.totalBytes) / 1_073_741_824
             memory = IndicatorReading(id: .memory, value: IndicatorReading.percent(usage),
-                detail: String(format: "%.1f de %.1f GiB · memória ativa, reservada pelo sistema e comprimida; exclui cache inativo.", gib, totalGiB), sampledAt: sampledAt, usedBytes: bytes, totalBytes: Double(snapshot.totalBytes), numericValue: usage)
+                detail: String(format: "%.1f de %.0f GB · memória ativa, reservada pelo sistema e comprimida; exclui cache inativo.", gib, totalGiB), sampledAt: sampledAt, usedBytes: bytes, totalBytes: Double(snapshot.totalBytes), numericValue: usage)
         } else {
             memory = .unavailable(.memory, "Falha ou contadores inválidos na leitura de memória física.")
         }
-        return [cpu, memory,
+        var namedCPU = cpu
+        namedCPU.hardwareName = HardwareNames.cpu
+        return [namedCPU, memory,
             .unavailable(.gpu, "Uso da GPU indisponível: esta prévia não dispõe de um contador público e suportado de utilização global do macOS."),
             .unavailable(.cpuTemperature, "Sensor de temperatura da CPU indisponível por API pública suportada, sem privilégios; nenhum valor é estimado."),
             .unavailable(.gpuTemperature, "Sensor de temperatura da GPU indisponível por API pública suportada, sem privilégios; nenhum valor é estimado.")]

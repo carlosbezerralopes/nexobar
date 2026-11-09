@@ -30,7 +30,8 @@ enum IndicatorIconStyle: String, CaseIterable, Codable, Identifiable {
         case .cpu: return self == .system ? ["gauge.medium", "speedometer", "cpu"] : ["waveform.path.ecg", "chart.bar.xaxis", "waveform"]
         case .memory: return self == .system ? ["memorychip", "rectangle.stack"] : ["square.stack.3d.up", "rectangle.stack"]
         case .gpu: return self == .system ? ["display", "rectangle"] : ["rectangle.3.group", "square.grid.3x1", "display"]
-        case .cpuTemperature, .gpuTemperature: return ["thermometer.medium", "thermometer"]
+        case .ssd: return self == .system ? ["internaldrive", "externaldrive"] : ["internaldrive", "externaldrive"]
+        case .cpuTemperature, .gpuTemperature, .ssdTemperature: return ["thermometer.medium", "thermometer"]
         default: return [id.symbol, "circle"]
         }
     }
@@ -48,7 +49,7 @@ enum IndicatorIconStyle: String, CaseIterable, Codable, Identifiable {
         }
         if self == .letters {
             let title: String
-            switch id { case .cpu: title = "C"; case .memory: title = "M"; case .gpu: title = "G"; case .cpuTemperature: title = "C°"; case .gpuTemperature: title = "G°"; default: title = "?" }
+            switch id { case .cpu: title = "C"; case .memory: title = "M"; case .gpu: title = "G"; case .ssd: title = "S"; case .cpuTemperature: title = "C°"; case .gpuTemperature: title = "G°"; case .ssdTemperature: title = "S°"; default: title = "?" }
             let image = NSImage(size: NSSize(width: 18, height: 16), flipped: false) { _ in
                 let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11, weight: .bold), .foregroundColor: NSColor.labelColor]
                 let size = (title as NSString).size(withAttributes: attrs)
@@ -63,7 +64,8 @@ enum IndicatorIconStyle: String, CaseIterable, Codable, Identifiable {
         case .cpu: symbol = self == .solid ? "cpu.fill" : "cpu"
         case .memory: symbol = self == .solid ? "memorychip.fill" : "memorychip"
         case .gpu: symbol = self == .solid ? "square.stack.3d.up.fill" : "square.stack.3d.up"
-        case .cpuTemperature, .gpuTemperature: symbol = self == .solid ? "thermometer.high" : "thermometer.medium"
+        case .ssd: symbol = self == .solid ? "internaldrive.fill" : "internaldrive"
+        case .cpuTemperature, .gpuTemperature, .ssdTemperature: symbol = self == .solid ? "thermometer.high" : "thermometer.medium"
         default: symbol = id.symbol
         }
         return NSImage(systemSymbolName: symbol, accessibilityDescription: id.name) ?? ProviderMarks.image(for: id)
@@ -119,6 +121,8 @@ struct BarAppearance: Codable, Equatable {
     var quotaLayout: QuotaBarLayout = .inline
     var detailedTime: Bool = false
     var notifyResets: Bool = true
+    /// Time until the quota renews, independent of the indicator names.
+    var showQuotaReset: Bool = true
     var interactionDisplay: StatusInteractionDisplay = .main
 }
 
@@ -131,6 +135,7 @@ extension BarAppearance {
         detailedTime = try values.decodeIfPresent(Bool.self, forKey: .detailedTime) ?? false
         notifyResets = try values.decodeIfPresent(Bool.self, forKey: .notifyResets) ?? true
         interactionDisplay = try values.decodeIfPresent(StatusInteractionDisplay.self, forKey: .interactionDisplay) ?? .main
+        showQuotaReset = try values.decodeIfPresent(Bool.self, forKey: .showQuotaReset) ?? true
     }
 }
 
@@ -143,13 +148,35 @@ struct IdentityMark: View {
 enum MemoryDisplay: String, Codable, CaseIterable, Identifiable {
     case usedTotal, percentage
     var id: String { rawValue }
-    var title: String { self == .usedTotal ? "Em uso / total" : "Percentual" }
+    var title: String { self == .usedTotal ? "GB (em uso/total)" : "Percentual" }
 }
 
 extension IndicatorReading {
     func displayValue(memory: MemoryDisplay) -> String {
         guard id == .memory, memory == .usedTotal, let usedBytes, let totalBytes,
-              usedBytes.isFinite, totalBytes.isFinite, usedBytes >= 0, totalBytes > 0 else { return value }
-        return String(format: "%.0f/%.0f GiB", usedBytes / 1_073_741_824, totalBytes / 1_073_741_824)
+              let text = BarText.memory(used: usedBytes, total: totalBytes) else { return value }
+        return text
+    }
+
+    /// SSD read/write pair; nil until two counter samples exist.
+    var ratesText: String? {
+        guard id == .ssd, let readRate, let writeRate else { return nil }
+        return BarText.rates(read: readRate, write: writeRate)
+    }
+
+    /// SSD free space ("512 GB livre"); usedBytes/totalBytes describe the startup volume.
+    var freeSpaceText: String? {
+        guard id == .ssd, let usedBytes, let totalBytes, totalBytes >= usedBytes,
+              let size = BarText.size(totalBytes - usedBytes) else { return nil }
+        return "\(size) livre"
+    }
+
+    /// Bar text for a hardware indicator: SSD active time · rates (optional) · temperature · free space (optional).
+    func barValue(item: IndicatorConfiguration, temperature: IndicatorReading?) -> String {
+        var parts = [displayValue(memory: item.memoryDisplay)]
+        if item.showRates, let ratesText { parts.append(ratesText) }
+        if let temperature { parts.append(temperature.value.replacingOccurrences(of: " ", with: "")) }
+        if item.showFreeSpace, let freeSpaceText { parts.append(freeSpaceText) }
+        return parts.joined(separator: BarText.separator)
     }
 }

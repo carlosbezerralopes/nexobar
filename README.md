@@ -14,10 +14,10 @@ Indicadores de hardware e limites de uso em uma barra compacta, com interface em
 
 ## O que você acompanha
 
-- **CPU, memória, GPU e temperaturas**, quando a plataforma e os sensores fornecem a leitura.
+- **CPU, GPU, SSD, RAM e temperaturas**, quando a plataforma e os sensores fornecem a leitura. O SSD mostra tempo ativo, leitura/escrita opcional e espaço livre.
 - **Cotas de IA e horários de renovação** informados pelos clientes compatíveis. Uma janela semanal aparece sozinha quando não existe uma janela de sessão.
 - **Detalhes por indicador**, com gráficos de hardware dos últimos cinco minutos mantidos somente em memória.
-- **Uma barra do seu jeito:** ordem, nomes, visibilidade, estilos, memória em GB ou percentual e cotas em uma ou duas linhas.
+- **Uma barra do seu jeito:** ordem, nomes curtos ou do hardware, visibilidade, estilos, memória em GB ou percentual, cotas em uma ou duas linhas e tempo até renovar opcional.
 
 Uma leitura ausente aparece como indisponível. O NexoBar não transforma ausência em zero nem usa consumo de CPU/GPU para inferir a atividade de uma tarefa de IA. Um contador que chegou a zero também não confirma que a cota foi renovada.
 
