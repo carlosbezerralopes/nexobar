@@ -27,6 +27,9 @@ public struct WorkerReading: Codable, Equatable, Sendable {
     public var ventoinhas_rpm: [Double]?
     public var perfil: String?
     public var top_cpu: [Process]?
+    /// Threads em execução no worker e sessões do Claude Code abertas nele, quando o coletor publicar.
+    public var threads: Int?
+    public var claude_sessoes: Int?
 
     public var topCPU: Process? { top_cpu?.max { ($0.cpu ?? -1) < ($1.cpu ?? -1) } }
     public var topGPU: GPUProcess? { gpu?.processos?.max { ($0.vram_mb ?? -1) < ($1.vram_mb ?? -1) } }
@@ -161,6 +164,7 @@ public enum WorkerFormat {
         func f(_ v: Double) -> String { number(v / unit, digits: mega && v / unit < 10 ? 1 : 0) }
         return "L \(f(read)) E \(f(write)) \(mega ? "MB/s" : "KB/s")"
     }
+    public static func count(_ v: Int?) -> String { v.flatMap { $0 >= 0 ? "\($0)" : nil } ?? missing }
     public static func load(_ v: Double?) -> String { valid(v).map { number($0, digits: 2) } ?? missing }
     public static func fans(_ rpm: [Double]?) -> String {
         let values = (rpm ?? []).compactMap(valid)

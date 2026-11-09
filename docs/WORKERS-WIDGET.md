@@ -8,7 +8,7 @@ Widget WidgetKit (**NexoBar Workers**) que mostra, na mesa do Mac, a telemetria 
 
 | Arquivo | Uso no widget |
 |---|---|
-| `<worker>.json` | Última leitura (formato v1): CPU, RAM, SSD, GPU (`null` sem NVIDIA), ventoinhas, processos. No SSD, o widget usa `ativo` (% do tempo com E/S), `leitura_bs` e `escrita_bs` (bytes/s), como o disco no Windows; `uso` é espaço ocupado e não é exibido. Enquanto o coletor não publicar esses campos, o percentual aparece como "—". |
+| `<worker>.json` | Última leitura (formato v1): CPU, RAM, SSD, GPU (`null` sem NVIDIA), ventoinhas, processos. No SSD, o widget usa `ativo` (% do tempo com E/S), `leitura_bs` e `escrita_bs` (bytes/s), como o disco no Windows; `uso` é espaço ocupado e não é exibido. Enquanto o coletor não publicar esses campos, o percentual aparece como "—". Também lê `threads` (threads em execução) e `claude_sessoes` (sessões do Claude Code abertas no worker), "—" enquanto ausentes. |
 | `<worker>.estado.json` | `conectando`, `conectado` ou `desconectado`, com o detalhe do SSH. |
 | `<worker>/AAAA-MM-DD.jsonl` | Histórico de 30 s. Ainda não exibido; o caminho está em `WorkersTelemetry.historyURL`. |
 

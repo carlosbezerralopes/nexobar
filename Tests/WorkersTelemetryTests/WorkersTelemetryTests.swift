@@ -14,7 +14,7 @@ final class WorkersTelemetryTests: XCTestCase {
         try Data(json.utf8).write(to: directory.appendingPathComponent(name))
     }
 
-    private let gpuWorker = #"{"v":1,"host":"worker-gpu","ts":1000,"hora":"x","cpu":{"uso":12.4,"temp":49,"load1":0.16},"ram":{"usada_gb":2.3,"total_gb":31,"swap_gb":0.8},"ssd":{"uso":21,"livre_gb":691,"temp":35},"gpu":{"uso":0,"temp":46,"vram_mb":1500,"vram_total_mb":6144,"watts":5.23,"processos":[{"pid":9,"vram_mb":200,"nome":"python"},{"pid":8,"vram_mb":1200,"nome":"comfy"}]},"ventoinhas_rpm":[0,2100],"perfil":"balanced","top_cpu":[{"pid":1,"cpu":0.0,"ram_mb":15,"nome":"systemd","cmd":""},{"pid":7,"cpu":35.5,"ram_mb":900,"nome":"ffmpeg","cmd":"ffmpeg -i"}],"ltx":null,"recebido":1004}"#
+    private let gpuWorker = #"{"v":1,"host":"worker-gpu","ts":1000,"hora":"x","cpu":{"uso":12.4,"temp":49,"load1":0.16},"ram":{"usada_gb":2.3,"total_gb":31,"swap_gb":0.8},"ssd":{"uso":21,"livre_gb":691,"temp":35},"gpu":{"uso":0,"temp":46,"vram_mb":1500,"vram_total_mb":6144,"watts":5.23,"processos":[{"pid":9,"vram_mb":200,"nome":"python"},{"pid":8,"vram_mb":1200,"nome":"comfy"}]},"ventoinhas_rpm":[0,2100],"perfil":"balanced","top_cpu":[{"pid":1,"cpu":0.0,"ram_mb":15,"nome":"systemd","cmd":""},{"pid":7,"cpu":35.5,"ram_mb":900,"nome":"ffmpeg","cmd":"ffmpeg -i"}],"ltx":null,"threads":812,"claude_sessoes":2,"recebido":1004}"#
     private let cpuWorker = #"{"v":1,"host":"worker-cpu","ts":1000,"cpu":{"uso":3,"temp":null,"load1":0.5},"ram":{"usada_gb":4,"total_gb":16,"swap_gb":0},"ssd":{"uso":50,"livre_gb":100,"temp":null},"gpu":null,"ventoinhas_rpm":[],"top_cpu":[],"recebido":1002}"#
 
     func testLoadsReadingsAndConnectionStatesWithoutInventingZeros() throws {
@@ -29,6 +29,9 @@ final class WorkersTelemetryTests: XCTestCase {
         XCTAssertEqual(gpu.displayName, "gpu")
         XCTAssertEqual(gpu.reading?.topCPU?.nome, "ffmpeg")
         XCTAssertEqual(gpu.reading?.topGPU?.nome, "comfy")
+        XCTAssertEqual(gpu.reading?.threads, 812)
+        XCTAssertEqual(gpu.reading?.claude_sessoes, 2)
+        XCTAssertNil(workers[0].reading?.claude_sessoes, "ausente não vira zero")
         XCTAssertEqual(gpu.connection?.estado, .conectado)
         let cpu = workers[0]
         XCTAssertNil(cpu.reading?.gpu)
@@ -91,6 +94,8 @@ final class WorkersTelemetryTests: XCTestCase {
         XCTAssertNil(WorkerFormat.rates(read: nil, write: 10))
         XCTAssertEqual(WorkerFormat.fans([0, 2100]), "0 · 2100 rpm")
         XCTAssertEqual(WorkerFormat.fans([]), "—")
+        XCTAssertEqual(WorkerFormat.count(0), "0")
+        XCTAssertEqual(WorkerFormat.count(nil), "—")
         XCTAssertEqual(WorkerFormat.fans(nil), "—")
         let utc = TimeZone(identifier: "UTC")!
         XCTAssertEqual(WorkerFormat.time(Date(timeIntervalSince1970: 3661), timeZone: utc), "01:01:01")

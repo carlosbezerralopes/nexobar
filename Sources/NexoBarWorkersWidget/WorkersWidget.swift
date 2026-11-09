@@ -112,11 +112,26 @@ struct WorkerCard: View {
                 Text(detail ?? "sem leitura").font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(3)
             }
             Spacer(minLength: 0)
-            Text(WorkerFormat.time(worker.sampledAt)).font(.system(size: 9).monospacedDigit()).foregroundStyle(.secondary)
+            footer
         }
         .padding(7)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(.background.opacity(0.35)))
+    }
+
+    /// Processos e hora da leitura. No médio, a hora divide a linha do processo de CPU para caber em altura.
+    @ViewBuilder private var footer: some View {
+        let time = Text(WorkerFormat.time(worker.sampledAt)).font(.system(size: 9).monospacedDigit()).foregroundStyle(.secondary)
+        let cpu = reading?.topCPU.map { process("cpu", $0.nome ?? WorkerFormat.missing, WorkerFormat.percent($0.cpu)) }
+        let gpu = reading?.topGPU.map { process("cube", $0.nome ?? WorkerFormat.missing, WorkerFormat.megabytesAsGB($0.vram_mb)) }
+        VStack(alignment: .leading, spacing: 0) {
+            if compact {
+                HStack(spacing: 4) { cpu; Spacer(minLength: 2); time }
+                gpu
+            } else {
+                cpu; gpu; time.padding(.top, 2)
+            }
+        }
     }
 
     private var detail: String? {
@@ -139,16 +154,12 @@ struct WorkerCard: View {
                 Image(systemName: "fan").font(.system(size: 8, weight: .semibold)).foregroundStyle(.secondary)
                 Text(WorkerFormat.fans(r.ventoinhas_rpm)).font(.system(size: 10).monospacedDigit()).lineLimit(1)
             }
-        }
-        VStack(alignment: .leading, spacing: 0) {
-            if let top = r.topCPU {
-                process("cpu", top.nome ?? WorkerFormat.missing, WorkerFormat.percent(top.cpu))
-            }
-            if let gpu = r.topGPU {
-                process("cube", gpu.nome ?? WorkerFormat.missing, WorkerFormat.megabytesAsGB(gpu.vram_mb))
+            GridRow {
+                Image(systemName: "terminal").font(.system(size: 8, weight: .semibold)).foregroundStyle(.secondary)
+                Text("\(WorkerFormat.count(r.threads)) threads  Claude \(WorkerFormat.count(r.claude_sessoes))")
+                    .font(.system(size: 10).monospacedDigit()).lineLimit(1).minimumScaleFactor(0.8)
             }
         }
-        .padding(.top, 1)
     }
 
     private func row(_ label: String, _ values: [String], secondary: Bool = false) -> some View {
