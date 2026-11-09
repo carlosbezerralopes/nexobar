@@ -125,6 +125,8 @@ struct BarAppearance: Codable, Equatable {
     var notifyResets: Bool = true
     /// Time until the quota renews, independent of the indicator names.
     var showQuotaReset: Bool = true
+    /// Plan name ("Max") beside the agent mark when the client reports it.
+    var showPlan: Bool = true
     var interactionDisplay: StatusInteractionDisplay = .main
 }
 
@@ -138,6 +140,7 @@ extension BarAppearance {
         notifyResets = try values.decodeIfPresent(Bool.self, forKey: .notifyResets) ?? true
         interactionDisplay = try values.decodeIfPresent(StatusInteractionDisplay.self, forKey: .interactionDisplay) ?? .main
         showQuotaReset = try values.decodeIfPresent(Bool.self, forKey: .showQuotaReset) ?? true
+        showPlan = try values.decodeIfPresent(Bool.self, forKey: .showPlan) ?? true
     }
 }
 
@@ -177,7 +180,7 @@ extension IndicatorReading {
     func barValue(item: IndicatorConfiguration, temperature: IndicatorReading?) -> String {
         var parts = [displayValue(memory: item.memoryDisplay)]
         if item.showRates, let ratesText { parts.append(ratesText) }
-        if let temperature { parts.append(temperature.value.replacingOccurrences(of: " ", with: "")) }
+        if let temperature { parts.append(BarText.temperature(temperature.value)) }
         if item.showFreeSpace, let freeSpaceText { parts.append(freeSpaceText) }
         return parts.joined(separator: BarText.separator)
     }

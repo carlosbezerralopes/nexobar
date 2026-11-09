@@ -79,6 +79,8 @@ struct IndicatorReading: Equatable, Codable {
     /// SSD read/write in bytes per second; nil until two counter samples exist.
     var readRate: Double? = nil
     var writeRate: Double? = nil
+    /// Plan named by the client in the same reading ("Max", "Team"); a failed reading has none.
+    var plan: String? = nil
     static func unavailable(_ id: IndicatorID, _ detail: String) -> Self {
         Self(id: id, value: "—", detail: detail, sampledAt: nil)
     }
@@ -155,6 +157,18 @@ extension IndicatorConfiguration {
 enum BarText {
     /// Thin spaces (U+2009) keep CPU · GPU · SSD · RAM narrow.
     static let separator = "\u{2009}·\u{2009}"
+
+    /// Bar temperatures drop the unit letter ("67°"); details keep "67 °C".
+    static func temperature(_ value: String) -> String {
+        value.replacingOccurrences(of: " °C", with: "°").replacingOccurrences(of: "°C", with: "°")
+    }
+
+    /// Client plan as shown beside the agent: title case, short, no control characters.
+    static func plan(_ raw: String?) -> String? {
+        let text = (raw ?? "").trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty, text.count <= 40, !text.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else { return nil }
+        return text.lowercased().capitalized
+    }
 
     /// One decimal, dropped when zero: 12,3 · 12 (locale decimal mark).
     static func decimal(_ value: Double, locale: Locale = .current) -> String {

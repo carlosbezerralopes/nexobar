@@ -12,7 +12,7 @@ struct IndicatorDetailView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 IndicatorGlyph(id: id, style: model.appearance.iconStyle).foregroundStyle(.teal)
-                Text(item.label.isEmpty ? id.name : item.label).font(.title2.bold())
+                Text((item.label.isEmpty ? id.name : item.label) + (reading?.plan.map { " " + $0 } ?? "")).font(.title2.bold())
                 Spacer()
                 Text(reading?.displayValue(memory: item.memoryDisplay) ?? "—").font(.system(.title2, design: .monospaced).weight(.semibold))
                     .lineLimit(1).minimumScaleFactor(0.6)
@@ -145,6 +145,7 @@ struct SettingsView: View {
                     Text("Horizontal").tag(QuotaBarLayout.inline); Text("Duas linhas").tag(QuotaBarLayout.stacked)
                 }.pickerStyle(.segmented).frame(width: 320)
                 Toggle("Mostrar tempo até renovar", isOn: Binding(get: { model.appearance.showQuotaReset }, set: { shown in var value = model.appearance; value.showQuotaReset = shown; model.updateAppearance(value) })).font(.caption)
+                Toggle("Mostrar plano", isOn: Binding(get: { model.appearance.showPlan }, set: { shown in var value = model.appearance; value.showPlan = shown; model.updateAppearance(value) })).font(.caption)
                 Toggle("Detalhar tempo restante", isOn: Binding(get: { model.appearance.detailedTime }, set: { detailed in var value = model.appearance; value.detailedTime = detailed; model.updateAppearance(value) })).font(.caption)
                     .disabled(!model.appearance.showQuotaReset)
                 Spacer()

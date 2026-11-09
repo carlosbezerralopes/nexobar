@@ -293,7 +293,7 @@ final class StatusStripTests: XCTestCase {
             strip.update(items: items, readings: readings, appearance: BarAppearance())
             let buttons = strip.subviews.sorted { $0.frame.minX < $1.frame.minX }
             XCTAssertEqual(buttons.map { $0.identifier?.rawValue }, ["cpu", "memory", "gpu"])
-            XCTAssertEqual(buttons[0].accessibilityValue() as? String, "42%\u{2009}·\u{2009}65°C")
+            XCTAssertEqual(buttons[0].accessibilityValue() as? String, "42%\u{2009}·\u{2009}65°")
             XCTAssertEqual(buttons[2].accessibilityValue() as? String, "18%\u{2009}·\u{2009}—")
             XCTAssertTrue(buttons[2].toolTip?.contains("Sensor GPU indisponível") == true)
             var clicked: IndicatorID?

@@ -472,6 +472,8 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSPopoverDeleg
         horizontal.state = dashboard.appearance.quotaLayout == .inline ? .on : .off
         let stacked = add("Limites de IA: duas linhas", #selector(useStacked))
         stacked.state = dashboard.appearance.quotaLayout == .stacked ? .on : .off
+        let plan = add("Mostrar plano", #selector(togglePlan))
+        plan.state = dashboard.appearance.showPlan ? .on : .off
         let reset = add("Mostrar tempo até renovar", #selector(toggleQuotaReset))
         reset.state = dashboard.appearance.showQuotaReset ? .on : .off
         let detail = add("Detalhar tempo restante", #selector(toggleDetailedTime))
@@ -504,6 +506,7 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSPopoverDeleg
     @objc private func useStacked() { var value = dashboard.appearance; value.quotaLayout = .stacked; dashboard.updateAppearance(value) }
     @objc private func toggleSSDRates() { dashboard.toggleSSDOption(\.showRates) }
     @objc private func toggleSSDFreeSpace() { dashboard.toggleSSDOption(\.showFreeSpace) }
+    @objc private func togglePlan() { var value = dashboard.appearance; value.showPlan.toggle(); dashboard.updateAppearance(value) }
     @objc private func toggleQuotaReset() { var value = dashboard.appearance; value.showQuotaReset.toggle(); dashboard.updateAppearance(value) }
     @objc private func toggleDetailedTime() { var value = dashboard.appearance; value.detailedTime.toggle(); dashboard.updateAppearance(value) }
     @objc private func toggleResetNotices() { var value = dashboard.appearance; value.notifyResets.toggle(); dashboard.updateAppearance(value) }

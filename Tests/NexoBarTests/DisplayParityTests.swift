@@ -111,10 +111,10 @@ final class DisplayParityTests: XCTestCase {
             reading.readRate = 0; reading.writeRate = 70_000
             let celsius = IndicatorReading(id: .ssdTemperature, value: "39 °C", detail: "", sampledAt: Date())
             strip.update(items: [ssd, temperature], readings: [.ssd: reading, .ssdTemperature: celsius], appearance: BarAppearance())
-            XCTAssertEqual(strip.subviews[0].accessibilityValue() as? String, "25%\(thin)39°C\(thin)89 GB livre")
+            XCTAssertEqual(strip.subviews[0].accessibilityValue() as? String, "25%\(thin)39°\(thin)89 GB livre")
             ssd.showRates = true; ssd.showFreeSpace = false
             strip.update(items: [ssd, temperature], readings: [.ssd: reading, .ssdTemperature: celsius], appearance: BarAppearance())
-            XCTAssertEqual(strip.subviews[0].accessibilityValue() as? String, "25%\(thin)L 0 E 70 KB/s\(thin)39°C")
+            XCTAssertEqual(strip.subviews[0].accessibilityValue() as? String, "25%\(thin)L 0 E 70 KB/s\(thin)39°")
         }
     }
 
@@ -163,6 +163,37 @@ final class DisplayParityTests: XCTestCase {
             let width = IndicatorIconStyle.letters.image(for: id)?.size.width ?? 0
             XCTAssertGreaterThan(width, 16, "\(id) shows CPU/GPU/SSD/RAM, not a single letter")
             XCTAssertLessThan(width, 26)
+        }
+    }
+
+    func testClaudePlanComesOnlyFromTheHeader() {
+        XCTAssertEqual(ClaudeUsageParser.plan("Claude Code v3\nOpus 5.5 · Claude Max\n❯"), "Max")
+        XCTAssertEqual(ClaudeUsageParser.plan("Sonnet 5.5 · Claude Team   \n"), "Team")
+        XCTAssertNil(ClaudeUsageParser.plan("Current session\n42% used"))
+        XCTAssertEqual(BarText.temperature("67 °C"), "67°")
+    }
+
+    func testFullBarWithPlanFitsTheNotchBudget() async {
+        await MainActor.run {
+            _ = NSApplication.shared
+            let strip = StatusStrip(frame: NSRect(x: 0, y: 0, width: 0, height: 24))
+            var appearance = BarAppearance(); appearance.iconStyle = .letters; appearance.quotaLayout = .stacked; appearance.detailedTime = true
+            let now = Date()
+            var claude = IndicatorReading(id: .claude, value: "39%", detail: "", sampledAt: now,
+                windows: [QuotaWindow(name: "Sessão", usedPercent: 12, resetsAt: now.addingTimeInterval(9000), id: "session"),
+                          QuotaWindow(name: "Semanal", usedPercent: 39, resetsAt: now.addingTimeInterval(226000), id: "weekly_all")])
+            claude.plan = "Team"
+            let readings: [IndicatorID: IndicatorReading] = [
+                .cpu: .init(id: .cpu, value: "45%", detail: "", sampledAt: now), .cpuTemperature: .init(id: .cpuTemperature, value: "67 °C", detail: "", sampledAt: now),
+                .gpu: .init(id: .gpu, value: "45%", detail: "", sampledAt: now), .gpuTemperature: .init(id: .gpuTemperature, value: "67 °C", detail: "", sampledAt: now),
+                .ssd: .init(id: .ssd, value: "45%", detail: "", sampledAt: now), .ssdTemperature: .init(id: .ssdTemperature, value: "67 °C", detail: "", sampledAt: now),
+                .memory: .init(id: .memory, value: "48%", detail: "", sampledAt: now, usedBytes: 23.2 * 1_073_741_824, totalBytes: 48 * 1_073_741_824),
+                .claude: claude]
+            let items = IndicatorConfiguration.defaults.map { item -> IndicatorConfiguration in
+                var copy = item; copy.enabled = [.cpu, .gpu, .ssd, .memory, .cpuTemperature, .gpuTemperature, .ssdTemperature, .claude].contains(item.id); return copy }
+            let width = strip.update(items: items, readings: readings, appearance: appearance, layout: .stacked, now: now, detailedTime: true, maxWidth: 480)
+            XCTAssertTrue(strip.hiddenIDs.isEmpty, "\(width) pt; hidden \(strip.hiddenIDs)")
+            XCTAssertEqual(strip.subviews.first { $0.identifier?.rawValue == "claude" }?.accessibilityLabel(), "Claude Team")
         }
     }
 }
