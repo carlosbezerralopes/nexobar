@@ -20,13 +20,13 @@ struct WorkersWidgetIntent: WidgetConfigurationIntent {
     static let description = IntentDescription("Escolha a ordem dos workers e dê apelidos a eles.")
 
     @Parameter(title: "1º worker") var worker1: WorkerEntity?
-    @Parameter(title: "Apelido do 1º") var apelido1: String?
+    @Parameter(title: "Apelido do 1º worker") var apelido1: String?
     @Parameter(title: "2º worker") var worker2: WorkerEntity?
-    @Parameter(title: "Apelido do 2º") var apelido2: String?
+    @Parameter(title: "Apelido do 2º worker") var apelido2: String?
     @Parameter(title: "3º worker") var worker3: WorkerEntity?
-    @Parameter(title: "Apelido do 3º") var apelido3: String?
+    @Parameter(title: "Apelido do 3º worker") var apelido3: String?
     @Parameter(title: "4º worker") var worker4: WorkerEntity?
-    @Parameter(title: "Apelido do 4º") var apelido4: String?
+    @Parameter(title: "Apelido do 4º worker") var apelido4: String?
 
     static var parameterSummary: some ParameterSummary {
         Summary {

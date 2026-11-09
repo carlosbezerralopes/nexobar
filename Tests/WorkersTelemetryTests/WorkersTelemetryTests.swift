@@ -84,9 +84,9 @@ final class WorkersTelemetryTests: XCTestCase {
         XCTAssertEqual(WorkerFormat.temperature(48.6), "49°")
         XCTAssertEqual(WorkerFormat.gigabytes(2.34), "2,3")
         XCTAssertEqual(WorkerFormat.gigabytes(691.4), "691")
-        XCTAssertEqual(WorkerFormat.megabytesAsGB(15), "15M")
-        XCTAssertEqual(WorkerFormat.megabytesAsGB(6144), "6G")
-        XCTAssertEqual(WorkerFormat.megabytesAsGB(1536), "1,5G")
+        XCTAssertEqual(WorkerFormat.megabytesAsGB(15), "15 MB")
+        XCTAssertEqual(WorkerFormat.megabytesAsGB(6144), "6 GB")
+        XCTAssertEqual(WorkerFormat.megabytesAsGB(1536), "1,5 GB")
         XCTAssertEqual(WorkerFormat.watts(5.23), "5,2W")
         XCTAssertEqual(WorkerFormat.load(0.16), "0,16")
         XCTAssertEqual(WorkerFormat.rates(read: 1.2 * 1_048_576, write: 400 * 1024), "L 1,2 E 0,4 MB/s")
@@ -127,18 +127,18 @@ final class WorkersLayoutTests: XCTestCase {
         return WorkerSnapshot(id: id, reading: reading, connection: nil)
     }
 
-    func testWithoutChoicesKeepsAlphabeticalOrderAndNicknamesByPosition() {
+    func testNicknameWithoutWorkerIsIgnoredAndOrderIsAlphabetical() {
         let all = [worker("worker-c", fresh: true), worker("worker-a", fresh: false), worker("worker-b", fresh: true)]
-        let result = WorkersLayout.arrange(all, slots: [(nil, nil), (nil, "Note"), (nil, nil), (nil, "sobra")])
+        let result = WorkersLayout.arrange(all, slots: [(nil, "Note"), (nil, nil)])
         XCTAssertEqual(result.map(\.id), ["worker-a", "worker-b", "worker-c"])
-        XCTAssertEqual(result.map(\.displayName), ["a", "Note", "c"])
+        XCTAssertEqual(result.map(\.displayName), ["a", "b", "c"])
     }
 
-    func testChosenWorkersTakeTheirPositionsAndEmptyOnesTakeTheNextRemaining() {
+    func testChosenWorkersComeFirstWithTheirNicknamesAndTheRestFollowWithOwnNames() {
         let all = [worker("worker-a", fresh: true), worker("worker-b", fresh: true), worker("worker-c", fresh: true)]
-        let result = WorkersLayout.arrange(all, slots: [("worker-c", " GPU "), (nil, "Primeiro livre"), ("worker-c", "dup"), (nil, "")])
-        XCTAssertEqual(result.map(\.id), ["worker-c", "worker-a", "worker-b"])
-        XCTAssertEqual(result.map(\.displayName), ["GPU", "Primeiro livre", "b"])
+        let result = WorkersLayout.arrange(all, slots: [("worker-c", " GPU "), (nil, "ignorado"), ("worker-c", "dup"), ("worker-b", "")])
+        XCTAssertEqual(result.map(\.id), ["worker-c", "worker-b", "worker-a"])
+        XCTAssertEqual(result.map(\.displayName), ["GPU", "b", "a"])
     }
 
     func testChosenWorkerMissingFromFolderStaysVisibleWithoutReading() {

@@ -142,8 +142,9 @@ struct WorkerCard: View {
         Grid(alignment: .leading, horizontalSpacing: 5, verticalSpacing: 1) {
             row("CPU", [WorkerFormat.percent(r.cpu?.uso), WorkerFormat.temperature(r.cpu?.temp)] + (compact ? [] : ["load \(WorkerFormat.load(r.cpu?.load1))"]))
             if let gpu = r.gpu {
-                row("GPU", [WorkerFormat.percent(gpu.uso), WorkerFormat.temperature(gpu.temp),
-                            "\(WorkerFormat.megabytesAsGB(gpu.vram_mb))/\(WorkerFormat.megabytesAsGB(gpu.vram_total_mb))"] + (compact ? [] : [WorkerFormat.watts(gpu.watts)]))
+                let base = [WorkerFormat.percent(gpu.uso), WorkerFormat.temperature(gpu.temp),
+                            "\(WorkerFormat.megabytesAsGB(gpu.vram_mb))/\(WorkerFormat.megabytesAsGB(gpu.vram_total_mb))"]
+                row("GPU", compact ? base : base + [WorkerFormat.watts(gpu.watts)], fallback: base)
             } else {
                 row("GPU", ["sem GPU"], secondary: true)
             }
@@ -162,11 +163,18 @@ struct WorkerCard: View {
         }
     }
 
-    private func row(_ label: String, _ values: [String], secondary: Bool = false) -> some View {
-        GridRow {
+    /// `fallback` substitui `values` quando a linha não cabe na largura do cartão.
+    private func row(_ label: String, _ values: [String], fallback: [String]? = nil, secondary: Bool = false) -> some View {
+        func text(_ items: [String]) -> some View {
+            Text(items.joined(separator: "  ")).font(.system(size: 10).monospacedDigit())
+                .foregroundStyle(secondary ? .secondary : .primary).lineLimit(1)
+        }
+        return GridRow {
             Text(label).font(.system(size: 8, weight: .bold)).foregroundStyle(.secondary)
-            Text(values.joined(separator: "  ")).font(.system(size: 10).monospacedDigit())
-                .foregroundStyle(secondary ? .secondary : .primary).lineLimit(1).minimumScaleFactor(0.8)
+            ViewThatFits(in: .horizontal) {
+                text(values).fixedSize()
+                text(fallback ?? values).minimumScaleFactor(0.8)
+            }
         }
     }
 

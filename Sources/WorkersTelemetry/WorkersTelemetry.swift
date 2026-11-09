@@ -119,23 +119,15 @@ public enum WorkersTelemetry {
 
 /// Ordem e apelidos escolhidos no editor do widget.
 public enum WorkersLayout {
-    /// Cada posição mostra o worker escolhido nela ou, vazia, o próximo worker em ordem alfabética ainda não mostrado;
-    /// o apelido da posição vale para o worker que ela mostra. Worker repetido aparece só na primeira posição; worker
-    /// escolhido que sumiu da pasta continua visível como sem leitura. Os que sobram vêm depois, em ordem alfabética.
+    /// O apelido pertence ao worker escolhido na mesma posição; apelido em posição sem worker é ignorado. Os escolhidos vêm
+    /// primeiro, na ordem das posições; os demais depois, em ordem alfabética e com o nome original. Worker repetido aparece
+    /// só na primeira posição; worker escolhido que sumiu da pasta continua visível como sem leitura.
     public static func arrange(_ workers: [WorkerSnapshot], slots: [(id: String?, nickname: String?)]) -> [WorkerSnapshot] {
         var remaining = workers.sorted { $0.id < $1.id }
         var result: [WorkerSnapshot] = []
-        for slot in slots {
-            var worker: WorkerSnapshot
-            if let id = slot.id {
-                guard !result.contains(where: { $0.id == id }) else { continue }
-                if let index = remaining.firstIndex(where: { $0.id == id }) { worker = remaining.remove(at: index) }
-                else { worker = WorkerSnapshot(id: id, reading: nil, connection: nil) }
-            } else {
-                guard !remaining.isEmpty else { continue }
-                worker = remaining.removeFirst()
-            }
-            worker.nickname = slot.nickname
+        for case let (id?, nickname) in slots where !result.contains(where: { $0.id == id }) {
+            var worker = remaining.firstIndex { $0.id == id }.map { remaining.remove(at: $0) } ?? WorkerSnapshot(id: id, reading: nil, connection: nil)
+            worker.nickname = nickname
             result.append(worker)
         }
         return result + remaining
@@ -155,7 +147,7 @@ public enum WorkerFormat {
     public static func percent(_ v: Double?) -> String { valid(v).map { "\(Int($0.rounded()))%" } ?? missing }
     public static func temperature(_ v: Double?) -> String { valid(v).map { "\(Int($0.rounded()))°" } ?? missing }
     public static func gigabytes(_ v: Double?, digits: Int = 1) -> String { valid(v).map { number($0, digits: $0 >= 100 ? 0 : digits) } ?? missing }
-    public static func megabytesAsGB(_ v: Double?) -> String { valid(v).map { $0 < 1024 ? "\(Int($0.rounded()))M" : number($0 / 1024, digits: 1) + "G" } ?? missing }
+    public static func megabytesAsGB(_ v: Double?) -> String { valid(v).map { $0 < 1024 ? "\(Int($0.rounded())) MB" : number($0 / 1024, digits: 1) + " GB" } ?? missing }
     public static func watts(_ v: Double?) -> String { valid(v).map { number($0, digits: $0 >= 10 ? 0 : 1) + "W" } ?? missing }
     /// Mesmo formato do disco no Windows: uma unidade para o par, "L 1,2 E 0,4 MB/s".
     public static func rates(read: Double?, write: Double?) -> String? {
