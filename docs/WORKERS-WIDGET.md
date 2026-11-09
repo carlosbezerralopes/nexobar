@@ -44,4 +44,11 @@ pluginkit -m -v -p com.apple.widgetkit-extension | grep nexobar
 /usr/bin/log show --last 5m --style compact --predicate 'process == "NexoBarWorkersWidget"'
 ```
 
-Após reinstalar o app, a galeria pode manter a lista antiga até ser reaberta.
+Ao reinstalar o app, registre-o de novo e encerre o processo do widget, que o macOS reabre com a versão nova:
+
+```bash
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f /Applications/NexoBar.app
+pkill -x NexoBarWorkersWidget
+```
+
+Sem isso, o widget pode ficar parado com o erro "Bundle version did not match; LaunchServices DB may need to be rebuilt" no log do `chronod` (ocorreu em 08/11/2026 após duas reinstalações seguidas). Não reinicie o `chronod` nem a Central de Notificações para isso. Após reinstalar, a galeria pode manter a lista antiga até ser reaberta.
