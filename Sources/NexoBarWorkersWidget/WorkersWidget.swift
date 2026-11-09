@@ -157,10 +157,13 @@ struct WorkerCard: View {
         Grid(alignment: .leading, horizontalSpacing: 5, verticalSpacing: 1) {
             row("CPU", [WorkerFormat.percent(r.cpu?.uso), WorkerFormat.temperature(r.cpu?.temp)] + (compact ? [] : ["load \(WorkerFormat.load(r.cpu?.load1))"]))
             if let gpu = r.gpu {
-                // Fonte sem watts nem VRAM (o Mac, sem root) omite os dois em vez de mostrar "— —".
+                // Igual para NVIDIA e Mac: uso, temperatura e watts; a memória na linha de baixo (no Mac, sobre o limite que o
+                // macOS dá à GPU). Fonte sem watts nem memória omite os dois em vez de mostrar "—".
                 let reportsPower = gpu.watts != nil || gpu.vram_total_mb != nil
-                let base = [WorkerFormat.percent(gpu.uso), WorkerFormat.temperature(gpu.temp)] + (reportsPower ? [WorkerFormat.watts(gpu.watts)] : [])
-                row("GPU", base + (reportsPower ? [WorkerFormat.vram(used: gpu.vram_mb, total: gpu.vram_total_mb)] : []), fallback: base)
+                row("GPU", [WorkerFormat.percent(gpu.uso), WorkerFormat.temperature(gpu.temp)] + (reportsPower ? [WorkerFormat.watts(gpu.watts)] : []))
+                if !compact, gpu.vram_total_mb != nil {
+                    row("MEM", [WorkerFormat.vram(used: gpu.vram_mb, total: gpu.vram_total_mb)])
+                }
             } else {
                 row("GPU", ["sem GPU"], secondary: true)
             }
@@ -174,17 +177,22 @@ struct WorkerCard: View {
         }
     }
 
-    /// `fallback` substitui `values` quando a linha não cabe na largura do cartão.
+    /// Sem largura, primeiro aproxima os valores; só então `fallback` tira o que é menos importante.
     private func row(_ label: String, _ values: [String], fallback: [String]? = nil, secondary: Bool = false) -> some View {
-        func text(_ items: [String]) -> some View {
-            Text(items.joined(separator: "  ")).font(.system(size: 10).monospacedDigit())
+        func text(_ items: [String], _ separator: String = "  ") -> some View {
+            Text(items.joined(separator: separator)).font(.system(size: 10).monospacedDigit())
                 .foregroundStyle(secondary ? .secondary : .primary).lineLimit(1)
         }
         return GridRow {
             Text(label).font(.system(size: 8, weight: .bold)).foregroundStyle(.secondary)
             ViewThatFits(in: .horizontal) {
                 text(values).fixedSize()
-                text(fallback ?? values).minimumScaleFactor(0.8)
+                text(values, " ").fixedSize()
+                if let fallback {
+                    text(fallback).fixedSize()
+                    text(fallback, " ").fixedSize()
+                }
+                text(fallback ?? values, " ").minimumScaleFactor(0.8)
             }
         }
     }
