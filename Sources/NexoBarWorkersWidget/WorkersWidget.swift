@@ -162,7 +162,7 @@ struct WorkerCard: View {
                 let reportsPower = gpu.watts != nil || gpu.vram_total_mb != nil
                 row("GPU", [WorkerFormat.percent(gpu.uso), WorkerFormat.temperature(gpu.temp)] + (reportsPower ? [WorkerFormat.watts(gpu.watts)] : []))
                 if !compact, gpu.vram_total_mb != nil {
-                    row("MEM", [WorkerFormat.vram(used: gpu.vram_mb, total: gpu.vram_total_mb)])
+                    row("RAM", [WorkerFormat.vram(used: gpu.vram_mb, total: gpu.vram_total_mb)])
                 }
             } else {
                 row("GPU", ["sem GPU"], secondary: true)
