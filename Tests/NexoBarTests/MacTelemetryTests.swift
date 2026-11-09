@@ -83,3 +83,16 @@ final class GPUEnergyTests: XCTestCase {
         if let watts = energy.watts(uptime: 1.3) { XCTAssertGreaterThanOrEqual(watts, 0) }
     }
 }
+
+final class WorkerWakerTests: XCTestCase {
+    func testOnlyWorkersWithTheScriptPresentCanBeWoken() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("NexoBar/waker-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: home) }
+        let script = WorkerWaker.script(home: home)
+        XCTAssertFalse(WorkerWaker.canWake("worker-a", script: script), "sem o script do ~/.agents, sem a opção")
+        try FileManager.default.createDirectory(at: script.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("exit 0".utf8).write(to: script)
+        XCTAssertTrue(WorkerWaker.canWake("worker-a", script: script))
+        XCTAssertFalse(WorkerWaker.canWake("mac", script: script), "o Mac não se acorda")
+    }
+}

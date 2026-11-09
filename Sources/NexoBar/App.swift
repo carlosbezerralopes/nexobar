@@ -289,6 +289,7 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSPopoverDeleg
                                          memoryUsedBytes: readings[.memory]?.usedBytes)
         }
         workersWidget.start()
+        WorkerWaker.shared.onFinish = { [weak self] in self?.workersWidget.reload() }
         renderBar()
         if arguments.contains("--settings") { openSettings() }
         if let index = arguments.firstIndex(of: "--capture-window"), arguments.indices.contains(index + 1) {
@@ -540,14 +541,18 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSPopoverDeleg
         workerWindow?.close()
         let config = WidgetLayoutConfig.load()
         let shown = WorkersLayout.arrange(WorkersTelemetry.loadAll(), config: config)
-        let current = shown.first { $0.position == position }?.id
+        let currentWorker = shown.first { $0.position == position }
+        let current = currentWorker?.id
+        let sleeping = currentWorker.flatMap { w -> (id: String, name: String)? in
+            w.isStale(at: Date()) && WorkerWaker.canWake(w.id) ? (w.id, w.displayName) : nil
+        }
         let options = shown.sorted { $0.id < $1.id }.map { (id: $0.id, name: WorkerSnapshot.defaultName(id: $0.id, host: $0.reading?.host)) }
         let selected = config.ordem.indices.contains(position) ? config.ordem[position] ?? "" : ""
         let window = NSWindow(contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.title = "Posição \(position + 1) do widget"
         window.isReleasedWhenClosed = false
         window.contentView = NSHostingView(rootView: WorkerPositionView(
-            position: position, options: options, selected: selected,
+            position: position, sleeping: sleeping, options: options, selected: selected,
             nickname: config.apelidos[selected.isEmpty ? (current ?? "") : selected] ?? "", config: config,
             onSave: { [weak self, weak window] value in
                 try? value.save()
