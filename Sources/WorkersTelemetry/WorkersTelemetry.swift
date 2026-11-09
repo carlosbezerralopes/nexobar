@@ -3,7 +3,13 @@ import Foundation
 /// Leitura publicada pelo coletor `telemetria-workers` (formato v1). Todo campo é opcional: ausente nunca vira zero.
 public struct WorkerReading: Codable, Equatable, Sendable {
     public struct CPU: Codable, Equatable, Sendable { public var uso: Double?; public var temp: Double?; public var load1: Double? }
-    public struct RAM: Codable, Equatable, Sendable { public var usada_gb: Double?; public var total_gb: Double?; public var swap_gb: Double? }
+    /// `instalada_gb` é a soma dos pentes; `total_gb`, o que o kernel pode usar (sem a reserva do firmware).
+    public struct RAM: Codable, Equatable, Sendable {
+        public var usada_gb: Double?; public var total_gb: Double?; public var instalada_gb: Double?; public var swap_gb: Double?
+        public var displayTotal: Double? { instalada_gb ?? total_gb }
+    }
+    /// GPU integrada Intel, só quando não há NVIDIA: % do tempo acordada (fora do RC6).
+    public struct IntegratedGPU: Codable, Equatable, Sendable { public var ativo: Double? }
     /// `uso` é espaço ocupado (df); o widget mostra `ativo` (% do tempo com E/S, como o Monitor de Recursos) e as taxas, quando o coletor publicar.
     public struct SSD: Codable, Equatable, Sendable {
         public var uso: Double?; public var livre_gb: Double?; public var temp: Double?
@@ -27,11 +33,13 @@ public struct WorkerReading: Codable, Equatable, Sendable {
     public var ventoinhas_rpm: [Double]?
     public var perfil: String?
     public var top_cpu: [Process]?
-    /// Threads em execução no worker e sessões do Claude Code abertas nele, quando o coletor publicar.
-    public var threads: Int?
+    public var gpu_intel: IntegratedGPU?
+    /// Sessões do Claude Code abertas no worker, quando o coletor publicar.
     public var claude_sessoes: Int?
 
-    public var topCPU: Process? { top_cpu?.max { ($0.cpu ?? -1) < ($1.cpu ?? -1) } }
+    public var topCPU: Process? { topProcesses.first }
+    /// Até três processos com mais CPU, do maior para o menor.
+    public var topProcesses: [Process] { Array((top_cpu ?? []).sorted { ($0.cpu ?? -1) > ($1.cpu ?? -1) }.prefix(3)) }
     public var topGPU: GPUProcess? { gpu?.processos?.max { ($0.vram_mb ?? -1) < ($1.vram_mb ?? -1) } }
 }
 
@@ -157,6 +165,11 @@ public enum WorkerFormat {
         return "L \(f(read)) E \(f(write)) \(mega ? "MB/s" : "KB/s")"
     }
     public static func count(_ v: Int?) -> String { v.flatMap { $0 >= 0 ? "\($0)" : nil } ?? missing }
+    /// VRAM em GB com uma casa, para caber junto dos watts: "1,2/6 GB".
+    public static func vram(used: Double?, total: Double?) -> String {
+        guard let used = valid(used), let total = valid(total) else { return missing }
+        return number(used / 1024, digits: 1) + "/" + number(total / 1024, digits: 0) + " GB"
+    }
     public static func load(_ v: Double?) -> String { valid(v).map { number($0, digits: 2) } ?? missing }
     public static func fans(_ rpm: [Double]?) -> String {
         let values = (rpm ?? []).compactMap(valid)

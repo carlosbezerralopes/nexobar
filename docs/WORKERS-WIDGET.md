@@ -8,13 +8,13 @@ Widget WidgetKit (**NexoBar Workers**) que mostra, na mesa do Mac, a telemetria 
 
 | Arquivo | Uso no widget |
 |---|---|
-| `<worker>.json` | Última leitura (formato v1): CPU, RAM, SSD, GPU (`null` sem NVIDIA), ventoinhas, processos. No SSD, o widget usa `ativo` (% do tempo com E/S), `leitura_bs` e `escrita_bs` (bytes/s), como o disco no Windows; `uso` é espaço ocupado e não é exibido. Também lê `threads` (threads do sistema) e `claude_sessoes` (sessões do Claude Code abertas no worker, sem contar o processo `remote-control`). Campos ausentes, como num worker com coletor antigo, aparecem como "—". |
+| `<worker>.json` | Última leitura (formato v1): CPU, RAM, SSD, GPU (`null` sem NVIDIA), ventoinhas, processos. No SSD, o widget usa `ativo` (% do tempo com E/S), `leitura_bs` e `escrita_bs` (bytes/s), como o disco no Windows; `uso` é espaço ocupado e não é exibido. RAM: o total exibido é `ram.instalada_gb` (soma dos pentes), não o `total_gb` utilizável. Sem NVIDIA, `gpu_intel.ativo` dá o % do tempo em que a GPU Intel ficou acordada (fora do RC6). Também lê `claude_sessoes` (sessões do Claude Code abertas no worker, sem contar o processo `remote-control`). Campos ausentes, como num worker com coletor antigo, aparecem como "—". |
 | `<worker>.estado.json` | `conectando`, `conectado` ou `desconectado`, com o detalhe do SSH. |
 | `<worker>/AAAA-MM-DD.jsonl` | Histórico de 30 s. Ainda não exibido; o caminho está em `WorkersTelemetry.historyURL`. |
 
 ## Comportamento
 
-- Um cartão por worker, na ordem CPU · GPU · SSD · RAM, com temperaturas, ventoinha, o processo que mais usa CPU e o maior processo na GPU, quando houver.
+- Um cartão por worker, na ordem CPU · GPU · SSD · RAM, com temperaturas, watts da GPU, ventoinha e sessões do Claude, os três processos que mais usam CPU (só o maior no tamanho médio) e o maior processo na GPU, quando houver. VRAM e taxas do SSD só aparecem quando cabem na linha.
 - A hora da leitura fica sempre visível, na última linha do cartão, para o apelido ocupar a largura do cabeçalho. Leitura recebida há mais de 60 s, worker desconectado ou conectando aparece esmaecido como desatualizado. A timeline já traz a entrada em que cada cartão expira, sem depender de recarga.
 - Ausência não é zero: campo sem leitura aparece como "—"; worker sem NVIDIA mostra "sem GPU".
 - Tamanhos: médio (2 cartões, sem load/watts/swap), grande (até 4) e extragrande (até 4 lado a lado).

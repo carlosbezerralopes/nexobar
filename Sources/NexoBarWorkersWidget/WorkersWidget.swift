@@ -119,17 +119,23 @@ struct WorkerCard: View {
         .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(.background.opacity(0.35)))
     }
 
-    /// Processos e hora da leitura. No médio, a hora divide a linha do processo de CPU para caber em altura.
+    /// Processos e hora da leitura. No médio, só o maior processo, na mesma linha da hora, para caber em altura.
     @ViewBuilder private var footer: some View {
         let time = Text(WorkerFormat.time(worker.sampledAt)).font(.system(size: 9).monospacedDigit()).foregroundStyle(.secondary)
-        let cpu = reading?.topCPU.map { process("cpu", $0.nome ?? WorkerFormat.missing, WorkerFormat.percent($0.cpu)) }
-        let gpu = reading?.topGPU.map { process("cube", $0.nome ?? WorkerFormat.missing, WorkerFormat.megabytesAsGB($0.vram_mb)) }
+        let processes = reading?.topProcesses ?? []
+        let gpu = reading?.topGPU
         VStack(alignment: .leading, spacing: 0) {
             if compact {
-                HStack(spacing: 4) { cpu; Spacer(minLength: 2); time }
-                gpu
+                HStack(spacing: 4) {
+                    if let top = processes.first { process("cpu", top.nome ?? WorkerFormat.missing, WorkerFormat.percent(top.cpu)) }
+                    Spacer(minLength: 2); time
+                }
             } else {
-                cpu; gpu; time.padding(.top, 2)
+                ForEach(Array(processes.enumerated()), id: \.offset) { _, p in
+                    process("cpu", p.nome ?? WorkerFormat.missing, WorkerFormat.percent(p.cpu))
+                }
+                if let gpu { process("cube", gpu.nome ?? WorkerFormat.missing, WorkerFormat.megabytesAsGB(gpu.vram_mb)) }
+                time.padding(.top, 2)
             }
         }
     }
@@ -142,22 +148,19 @@ struct WorkerCard: View {
         Grid(alignment: .leading, horizontalSpacing: 5, verticalSpacing: 1) {
             row("CPU", [WorkerFormat.percent(r.cpu?.uso), WorkerFormat.temperature(r.cpu?.temp)] + (compact ? [] : ["load \(WorkerFormat.load(r.cpu?.load1))"]))
             if let gpu = r.gpu {
-                let base = [WorkerFormat.percent(gpu.uso), WorkerFormat.temperature(gpu.temp),
-                            "\(WorkerFormat.megabytesAsGB(gpu.vram_mb))/\(WorkerFormat.megabytesAsGB(gpu.vram_total_mb))"]
-                row("GPU", compact ? base : base + [WorkerFormat.watts(gpu.watts)], fallback: base)
+                let base = [WorkerFormat.percent(gpu.uso), WorkerFormat.temperature(gpu.temp), WorkerFormat.watts(gpu.watts)]
+                row("GPU", base + [WorkerFormat.vram(used: gpu.vram_mb, total: gpu.vram_total_mb)], fallback: base)
+            } else if let intel = r.gpu_intel {
+                row("GPU", [WorkerFormat.percent(intel.ativo), "Intel"])
             } else {
                 row("GPU", ["sem GPU"], secondary: true)
             }
-            row("SSD", [WorkerFormat.percent(r.ssd?.ativo), WorkerFormat.temperature(r.ssd?.temp),
-                        (compact ? nil : WorkerFormat.rates(read: r.ssd?.leitura_bs, write: r.ssd?.escrita_bs)) ?? "\(WorkerFormat.gigabytes(r.ssd?.livre_gb)) GB livre"])
-            row("RAM", ["\(WorkerFormat.gigabytes(r.ram?.usada_gb))/\(WorkerFormat.gigabytes(r.ram?.total_gb)) GB"] + (compact ? [] : ["swap \(WorkerFormat.gigabytes(r.ram?.swap_gb)) GB"]))
+            let ssd = [WorkerFormat.percent(r.ssd?.ativo), WorkerFormat.temperature(r.ssd?.temp), "\(WorkerFormat.gigabytes(r.ssd?.livre_gb)) GB livre"]
+            row("SSD", ssd + [WorkerFormat.rates(read: r.ssd?.leitura_bs, write: r.ssd?.escrita_bs)].compactMap { $0 }, fallback: ssd)
+            row("RAM", ["\(WorkerFormat.gigabytes(r.ram?.usada_gb))/\(WorkerFormat.gigabytes(r.ram?.displayTotal)) GB"] + (compact ? [] : ["swap \(WorkerFormat.gigabytes(r.ram?.swap_gb)) GB"]))
             GridRow {
                 Image(systemName: "fan").font(.system(size: 8, weight: .semibold)).foregroundStyle(.secondary)
-                Text(WorkerFormat.fans(r.ventoinhas_rpm)).font(.system(size: 10).monospacedDigit()).lineLimit(1)
-            }
-            GridRow {
-                Image(systemName: "terminal").font(.system(size: 8, weight: .semibold)).foregroundStyle(.secondary)
-                Text("\(WorkerFormat.count(r.threads)) threads  Claude \(WorkerFormat.count(r.claude_sessoes))")
+                Text("\(WorkerFormat.fans(r.ventoinhas_rpm))   Claude \(WorkerFormat.count(r.claude_sessoes))")
                     .font(.system(size: 10).monospacedDigit()).lineLimit(1).minimumScaleFactor(0.8)
             }
         }
