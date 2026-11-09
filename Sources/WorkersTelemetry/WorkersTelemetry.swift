@@ -58,6 +58,8 @@ public struct WorkerSnapshot: Equatable, Sendable, Identifiable {
     public var nickname: String?
     /// Posição do widget que o cartão ocupa (o clique edita essa posição); nil fora das quatro posições.
     public var position: Int?
+    /// O NexoBar está tentando acordar este worker (ver `WakeMarks`).
+    public var waking = false
 
     public init(id: String, reading: WorkerReading?, connection: WorkerConnection?, nickname: String? = nil) {
         self.id = id; self.reading = reading; self.connection = connection; self.nickname = nickname
@@ -109,14 +111,16 @@ public enum WorkersTelemetry {
     public static let macID = "mac"
 
     /// Workers do coletor e o Mac, gravado pelo NexoBar no mesmo formato.
-    public static func loadAll(workers: URL = defaultDirectory, app: URL = appDirectory) -> [WorkerSnapshot] {
-        load(directory: workers).filter { $0.id != macID } + load(directory: app).filter { $0.id == macID }
+    public static func loadAll(workers: URL = defaultDirectory, app: URL = appDirectory, now: Date = Date()) -> [WorkerSnapshot] {
+        let waking = WakeMarks.load(directory: app, now: now)
+        return (load(directory: workers).filter { $0.id != macID } + load(directory: app).filter { $0.id == macID })
+            .map { var w = $0; w.waking = waking.contains(w.id); return w }
     }
 
     public static func load(directory: URL = defaultDirectory) -> [WorkerSnapshot] {
         let files = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
         var ids = Set<String>()
-        for file in files where file.hasSuffix(".json") && file != WidgetLayoutConfig.fileName {
+        for file in files where file.hasSuffix(".json") && file != WidgetLayoutConfig.fileName && file != WakeMarks.fileName {
             ids.insert(file.hasSuffix(".estado.json") ? String(file.dropLast(12)) : String(file.dropLast(5)))
         }
         let decoder = JSONDecoder()
@@ -141,6 +145,27 @@ public enum WorkersTelemetry {
             let date = (attributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
             return "\(name)@\(date)"
         }.joined(separator: "|")
+    }
+}
+
+/// Workers que o NexoBar está acordando (`acordando.json`: id → início). Uma marca vale no máximo `limit`, o tempo
+/// que o acordar.sh espera, para um app encerrado no meio não deixar o cartão "acordando" para sempre.
+public enum WakeMarks {
+    public static let fileName = "acordando.json"
+    public static let limit: TimeInterval = 5 * 60
+
+    public static func load(directory: URL = WorkersTelemetry.appDirectory, now: Date = Date()) -> Set<String> {
+        guard let data = try? Data(contentsOf: directory.appendingPathComponent(fileName)),
+              let marks = try? JSONDecoder().decode([String: Double].self, from: data) else { return [] }
+        return Set(marks.filter { now.timeIntervalSince1970 - $0.value < limit && $0.value <= now.timeIntervalSince1970 + 5 }.keys)
+    }
+
+    public static func set(_ id: String, waking: Bool, directory: URL = WorkersTelemetry.appDirectory, now: Date = Date()) throws {
+        let url = directory.appendingPathComponent(fileName)
+        var marks = (try? JSONDecoder().decode([String: Double].self, from: Data(contentsOf: url))) ?? [:]
+        marks[id] = waking ? now.timeIntervalSince1970 : nil
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try JSONEncoder().encode(marks).write(to: url, options: .atomic)
     }
 }
 

@@ -179,3 +179,20 @@ final class WorkersLayoutTests: XCTestCase {
         XCTAssertEqual(WorkersTelemetry.loadAll(workers: workers, app: app).map(\.id), ["worker-a", "mac"], "posicoes.json não vira cartão")
     }
 }
+
+final class WakeMarksTests: XCTestCase {
+    func testMarkShowsWakingUntilClearedOrExpiredAndIsNotACard() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("NexoBar/wake-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let workers = root.appendingPathComponent("workers"), app = root.appendingPathComponent("app")
+        try FileManager.default.createDirectory(at: workers, withIntermediateDirectories: true)
+        try Data(#"{"v":1,"recebido":1}"#.utf8).write(to: workers.appendingPathComponent("worker-a.json"))
+        let start = Date(timeIntervalSince1970: 10_000)
+        try WakeMarks.set("worker-a", waking: true, directory: app, now: start)
+        XCTAssertEqual(WorkersTelemetry.loadAll(workers: workers, app: app, now: start.addingTimeInterval(60)).map(\.waking), [true])
+        XCTAssertEqual(WorkersTelemetry.loadAll(workers: workers, app: app, now: start.addingTimeInterval(301)).map(\.waking), [false], "marca vencida")
+        try WakeMarks.set("worker-a", waking: false, directory: app, now: start)
+        XCTAssertTrue(WakeMarks.load(directory: app, now: start).isEmpty)
+        XCTAssertEqual(WorkersTelemetry.loadAll(workers: workers, app: app, now: start).map(\.id), ["worker-a"], "acordando.json não vira cartão")
+    }
+}

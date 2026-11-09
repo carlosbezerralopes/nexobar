@@ -89,6 +89,7 @@ struct WorkerCard: View {
     private var reading: WorkerReading? { worker.reading }
 
     private var stateColor: Color {
+        if worker.waking && stale { return .orange }
         switch worker.connection?.estado {
         case .desconectado: return .red
         case .conectando: return .yellow
@@ -97,6 +98,7 @@ struct WorkerCard: View {
     }
 
     private var statusText: String? {
+        if worker.waking && stale { return "acordando" }
         switch worker.connection?.estado {
         case .desconectado: return "desconectado"
         case .conectando: return "conectando"

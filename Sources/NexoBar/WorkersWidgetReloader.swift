@@ -65,6 +65,8 @@ final class WorkerWaker: ObservableObject {
     func wake(_ id: String) {
         guard Self.canWake(id), !running.contains(id) else { return }
         running.insert(id); lastLine[id] = "Enviando o pedido para acordar…"
+        try? WakeMarks.set(id, waking: true)
+        onFinish?()
         let process = Process(), pipe = Pipe()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
         process.arguments = [Self.script().path, id]
@@ -82,13 +84,17 @@ final class WorkerWaker: ObservableObject {
         process.terminationHandler = { [weak self] finished in
             pipe.fileHandleForReading.readabilityHandler = nil
             let ok = finished.terminationStatus == 0
+            try? WakeMarks.set(id, waking: false)
             Task { @MainActor in
                 self?.running.remove(id)
                 if ok, self?.lastLine[id]?.isEmpty != false { self?.lastLine[id] = "Ligado." }
                 self?.onFinish?()
             }
         }
-        do { try process.run() } catch { running.remove(id); lastLine[id] = "Não foi possível rodar o script de acordar." }
+        do { try process.run() } catch {
+            running.remove(id); lastLine[id] = "Não foi possível rodar o script de acordar."
+            try? WakeMarks.set(id, waking: false); onFinish?()
+        }
     }
 }
 

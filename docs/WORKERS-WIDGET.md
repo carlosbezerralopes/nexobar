@@ -19,7 +19,7 @@ Widget WidgetKit (**NexoBar Workers**) que mostra, na mesa do Mac, o próprio Ma
 - Ausência não é zero: campo sem leitura aparece como "—"; worker sem NVIDIA mostra "sem GPU".
 - Tamanhos: médio (2 cartões, sem load/watts/swap), grande (até 4) e extragrande (até 4 lado a lado).
 - **Clique num cartão**: o NexoBar abre a janela daquela posição para escolher o PC (ou Automático) e o apelido. O apelido pertence ao PC e o acompanha se ele mudar de posição; escolher um PC que já está em outra posição troca as duas. No automático, o Mac vem primeiro e os workers depois, em ordem alfabética. As escolhas ficam em `~/Library/Application Support/NexoBar/widget-workers/posicoes.json`.
-- **Acordar**: se o worker do cartão clicado estiver desconectado, a janela oferece acordá-lo. O NexoBar roda `~/.agents/scripts/worker/acordar.sh <worker>` (Wake-on-LAN pela LAN de casa e espera do SSH, até 4 min) e mostra a última linha dele; sem o script, a opção não aparece. Worker sem WoL recebe do script a explicação de como liga.
+- **Acordar**: se o worker do cartão clicado estiver desconectado, a janela oferece acordá-lo. O NexoBar roda `~/.agents/scripts/worker/acordar.sh <worker>` (Wake-on-LAN pela LAN de casa e espera do SSH, até 4 min) e mostra a última linha dele; enquanto o script roda, o cartão fica "acordando" em laranja (marca em `NexoBar/widget-workers/acordando.json`, que vence em 5 min); sem o script, a opção não aparece. Worker sem WoL recebe do script a explicação de como liga.
 - O app NexoBar verifica a pasta a cada 5 s e pede ao WidgetKit a recarga quando um arquivo muda.
 
 ## Mac
