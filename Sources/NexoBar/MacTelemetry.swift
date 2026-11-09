@@ -5,14 +5,16 @@ import SystemConfiguration
 import WorkersTelemetry
 
 /// Leitura do próprio Mac no formato do coletor dos workers (`mac.json`), para o widget mostrar o Mac como mais um cartão.
-/// CPU, memória, GPU e temperaturas vêm do coletor do NexoBar; o resto é lido aqui, sem root. Watts e VRAM da GPU
-/// não têm fonte sem privilégios e ficam ausentes. Usada só pela fila serial do WorkersWidgetReloader.
+/// CPU, memória, GPU e temperaturas vêm do coletor do NexoBar; o resto é lido aqui, sem root (watts da GPU pelo
+/// IOReport, ver `GPUEnergy`). Usada só pela fila serial do WorkersWidgetReloader.
 final class MacTelemetry: @unchecked Sendable {
     struct Hardware { var cpu: Double?; var cpuTemperature: Double?; var gpu: Double?; var gpuTemperature: Double?; var memoryUsedBytes: Double? }
     struct DiskCounters: Equatable { var bytesRead: Double; var bytesWritten: Double; var busyNanoseconds: Double }
 
     private var previousDisk: (counters: DiskCounters, uptime: TimeInterval)?
     private let smc = ReadOnlySMC()
+    private let energy = GPUEnergy()
+    private lazy var gpuLimitMB = GPUEnergy.memory().limitMB
     private lazy var smcOpen = smc.open()
 
     func json(hardware: Hardware, now: Date) -> [String: Any] {
@@ -39,6 +41,9 @@ final class MacTelemetry: @unchecked Sendable {
         var gpu: [String: Any] = [:]
         gpu["uso"] = hardware.gpu.map { $0.rounded() }
         gpu["temp"] = hardware.gpuTemperature.map { $0.rounded() }
+        gpu["watts"] = energy.watts().map { ($0 * 100).rounded() / 100 }
+        gpu["vram_mb"] = GPUEnergy.memory().usedMB.map { $0.rounded() }
+        gpu["vram_total_mb"] = gpuLimitMB.map { $0.rounded() }
         let processes = Self.processes()
         var result: [String: Any] = [
             "v": 1, "host": Self.computerName(), "ts": Int(now.timeIntervalSince1970), "recebido": Int(now.timeIntervalSince1970),

@@ -23,7 +23,7 @@ Widget WidgetKit (**NexoBar Workers**) que mostra, na mesa do Mac, o próprio Ma
 
 ## Mac
 
-O NexoBar grava `~/Library/Application Support/NexoBar/widget-workers/mac.json` a cada 5 s: CPU, memória, GPU e temperaturas do coletor do app; RAM instalada (`hw.memsize`), swap, SSD interno (tempo ativo e taxas do `IOBlockStorageDriver`, espaço livre do volume), ventoinhas (AppleSMC `F0Ac`…), três processos do `ps` (média recente do macOS, não a amostra instantânea do `top`) e sessões do Claude Code, incluindo as do app Claude. Watts, VRAM e temperatura do SSD não têm fonte sem root e ficam fora.
+O NexoBar grava `~/Library/Application Support/NexoBar/widget-workers/mac.json` a cada 5 s: CPU, memória, GPU e temperaturas do coletor do app; RAM instalada (`hw.memsize`), swap, SSD interno (tempo ativo e taxas do `IOBlockStorageDriver`, espaço livre do volume), ventoinhas (AppleSMC `F0Ac`…), três processos do `ps` (média recente do macOS, não a amostra instantânea do `top`) e sessões do Claude Code, incluindo as do app Claude. Da GPU, também: watts pelo IOReport (canal "GPU Energy", interface privada da Apple usada sem root, como no macmon; se mudar num macOS novo, os watts ficam ausentes) e memória em uso (IOAccelerator) sobre o limite que o macOS dá à GPU (`recommendedMaxWorkingSetSize`, cerca de 3/4 da RAM unificada, ex.: 37 de 48 GB). A temperatura do SSD não tem fonte sem root e fica fora.
 
 ## Sandbox e assinatura
 

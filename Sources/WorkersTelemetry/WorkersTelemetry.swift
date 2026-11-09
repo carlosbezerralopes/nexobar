@@ -231,7 +231,7 @@ public enum WorkerFormat {
     /// VRAM em GB com uma casa, para caber junto dos watts: "1,2/6 GB".
     public static func vram(used: Double?, total: Double?) -> String {
         guard let used = valid(used), let total = valid(total) else { return missing }
-        return number(used / 1024, digits: 1) + "/" + number(total / 1024, digits: 0) + " GB"
+        return number(used / 1024, digits: 1) + "/" + number((total / 1024).rounded(), digits: 0) + " GB"
     }
     public static func load(_ v: Double?) -> String { valid(v).map { number($0, digits: 2) } ?? missing }
     public static func fans(_ rpm: [Double]?) -> String {

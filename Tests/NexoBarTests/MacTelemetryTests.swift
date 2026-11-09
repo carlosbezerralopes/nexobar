@@ -51,7 +51,8 @@ final class MacTelemetryTests: XCTestCase {
         XCTAssertEqual(reading.cpu?.uso, 12)
         XCTAssertNil(reading.cpu?.temp)
         XCTAssertEqual(reading.gpu?.temp, 42)
-        XCTAssertNil(reading.gpu?.watts)
+        XCTAssertNotNil(reading.gpu?.vram_total_mb, "limite da GPU pelo Metal")
+        XCTAssertNil(reading.gpu?.watts, "watts só a partir da segunda leitura")
         XCTAssertEqual(reading.ram?.usada_gb, 8)
         XCTAssertEqual(reading.ram?.instalada_gb, (Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824).rounded())
         XCTAssertEqual(reading.recebido, 1000)
@@ -64,5 +65,21 @@ final class SMCNumberTests: XCTestCase {
         let rpm: [UInt8] = [0, 64, 169, 68]   // flt 1354, medido no F0Ac de um Mac17,8
         XCTAssertEqual(HardwareSensorDecoding.smcNumber(type: "flt ", bytes: rpm), 1354)
         XCTAssertNil(HardwareSensorDecoding.smcValue(type: "flt ", bytes: rpm), "1354 não é temperatura")
+    }
+}
+
+final class GPUEnergyTests: XCTestCase {
+    func testEnergyUnitsConvertToJoulesAndUnknownUnitsAreDropped() {
+        XCTAssertEqual(GPUEnergy.joules(139_193_801, unit: "nJ"), 0.139193801)
+        XCTAssertEqual(GPUEnergy.joules(2500, unit: "mJ"), 2.5)
+        XCTAssertEqual(GPUEnergy.joules(2_000_000, unit: "uJ"), 2)
+        XCTAssertNil(GPUEnergy.joules(5, unit: "W"))
+    }
+
+    func testSecondSampleGivesWattsWhenIOReportIsAvailable() {
+        let energy = GPUEnergy()
+        XCTAssertNil(energy.watts(uptime: 1), "primeira leitura não tem intervalo")
+        Thread.sleep(forTimeInterval: 0.3)
+        if let watts = energy.watts(uptime: 1.3) { XCTAssertGreaterThanOrEqual(watts, 0) }
     }
 }
