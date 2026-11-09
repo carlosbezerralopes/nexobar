@@ -14,7 +14,7 @@ Indicadores de hardware e limites de uso em uma barra compacta, com interface em
 
 ## O que você acompanha
 
-- **CPU, GPU, SSD, RAM e temperaturas**, quando a plataforma e os sensores fornecem a leitura. O SSD mostra tempo ativo, leitura/escrita opcional e espaço livre.
+- **CPU, GPU, SSD, RAM e temperaturas**, quando a plataforma e os sensores fornecem a leitura. O SSD mostra tempo ativo e, opcionalmente, leitura/escrita e espaço livre.
 - **Cotas de IA e horários de renovação** informados pelos clientes compatíveis. Uma janela semanal aparece sozinha quando não existe uma janela de sessão.
 - **Detalhes por indicador**, com gráficos de hardware dos últimos cinco minutos mantidos somente em memória.
 - **Uma barra do seu jeito:** ordem, nomes curtos ou do hardware, visibilidade, estilos, memória em GB ou percentual, cotas em uma ou duas linhas e tempo até renovar opcional.

@@ -104,9 +104,9 @@ struct IndicatorConfiguration: Codable, Identifiable, Equatable {
     var label: String
     var showLabel: Bool = false
     var memoryDisplay: MemoryDisplay = .usedTotal
-    /// SSD only: read/write rates start off, free space starts on (as on Windows).
+    /// SSD only: read/write and free space start off; the Mac bar shares the notch with other items.
     var showRates: Bool = false
-    var showFreeSpace: Bool = true
+    var showFreeSpace: Bool = false
     static let maximumLabelLength = 40
     static var defaults: [Self] {
         IndicatorID.allCases.map { Self(id: $0, enabled: [.cpu, .gpu, .ssd, .memory, .cpuTemperature, .gpuTemperature, .ssdTemperature, .claude, .codex, .kiro].contains($0), label: $0.name) }
@@ -147,7 +147,7 @@ extension IndicatorConfiguration {
         showLabel = try values.decodeIfPresent(Bool.self, forKey: .showLabel) ?? false
         memoryDisplay = try values.decodeIfPresent(MemoryDisplay.self, forKey: .memoryDisplay) ?? .usedTotal
         showRates = try values.decodeIfPresent(Bool.self, forKey: .showRates) ?? false
-        showFreeSpace = try values.decodeIfPresent(Bool.self, forKey: .showFreeSpace) ?? true
+        showFreeSpace = try values.decodeIfPresent(Bool.self, forKey: .showFreeSpace) ?? false
     }
 }
 

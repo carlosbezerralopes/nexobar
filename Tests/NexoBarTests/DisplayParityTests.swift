@@ -20,7 +20,7 @@ final class DisplayParityTests: XCTestCase {
         let top = IndicatorConfiguration.defaults.filter { !$0.id.isNested }
         XCTAssertEqual(top.prefix(7).map(\.label), ["CPU", "GPU", "SSD", "RAM", "Claude", "Codex", "Kiro"])
         let ssd = IndicatorConfiguration.defaults.first { $0.id == .ssd }!
-        XCTAssertTrue(ssd.enabled); XCTAssertFalse(ssd.showRates); XCTAssertTrue(ssd.showFreeSpace)
+        XCTAssertTrue(ssd.enabled); XCTAssertFalse(ssd.showRates); XCTAssertFalse(ssd.showFreeSpace)
         XCTAssertEqual(IndicatorID.ssd.temperatureChild, .ssdTemperature)
     }
 
@@ -105,6 +105,7 @@ final class DisplayParityTests: XCTestCase {
             _ = NSApplication.shared
             let strip = StatusStrip(frame: NSRect(x: 0, y: 0, width: 0, height: 24))
             var ssd = IndicatorConfiguration(id: .ssd, enabled: true, label: "SSD")
+            ssd.showFreeSpace = true
             let temperature = IndicatorConfiguration(id: .ssdTemperature, enabled: true, label: "Temperatura SSD")
             var reading = IndicatorReading(id: .ssd, value: "25%", detail: "", sampledAt: Date(), usedBytes: 911e9, totalBytes: 1000e9, numericValue: 25)
             reading.readRate = 0; reading.writeRate = 70_000
@@ -155,5 +156,13 @@ final class DisplayParityTests: XCTestCase {
     func testSSDTemperatureKeysOnlyForAppleSilicon() {
         XCTAssertEqual(HardwareSensorDecoding.ssdTemperatureKeys(model: "Apple M5 Pro"), ["TH0x", "TH0a", "TH0b"])
         XCTAssertEqual(HardwareSensorDecoding.ssdTemperatureKeys(model: "Intel(R) Core(TM) i7"), [])
+    }
+
+    func testLettersStyleShowsHardwareNamesAndFitsTheNotchBudget() {
+        for id in [IndicatorID.cpu, .gpu, .ssd, .memory] {
+            let width = IndicatorIconStyle.letters.image(for: id)?.size.width ?? 0
+            XCTAssertGreaterThan(width, 16, "\(id) shows CPU/GPU/SSD/RAM, not a single letter")
+            XCTAssertLessThan(width, 26)
+        }
     }
 }

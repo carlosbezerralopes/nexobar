@@ -245,7 +245,7 @@ struct SettingsView: View {
     private func indicatorRow(_ item: IndicatorConfiguration, index: Int) -> some View {
         HStack(spacing: 10) {
             Toggle("", isOn: Binding(get: { current(item).enabled }, set: { enabled in var edit = current(item); edit.enabled = enabled; model.update(edit) })).labelsHidden().toggleStyle(.switch).controlSize(.small).accessibilityLabel("Mostrar \(item.id.name)")
-            IndicatorGlyph(id: item.id, style: model.appearance.iconStyle).frame(width: 20).foregroundStyle(item.id.isAI ? .purple : .teal)
+            IndicatorGlyph(id: item.id, style: model.appearance.iconStyle).frame(width: 28).foregroundStyle(item.id.isAI ? .purple : .teal)
             TextField(item.id.name, text: Binding(get: { current(item).label }, set: { label in var edit = current(item); edit.label = label; model.update(edit) })).textFieldStyle(.roundedBorder).frame(width: 150)
             Button { model.restoreLabel(item.id) } label: { Image(systemName: "arrow.counterclockwise") }
                 .buttonStyle(.borderless).disabled(model.alternateLabel(for: item.id) == nil)

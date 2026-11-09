@@ -74,7 +74,7 @@ final class NativeStatusImageTests: XCTestCase {
             strip.onOverflow = { overflowAnchor = $0 }
             strip.onContext = { id, view, _ in contextIDs.append(id); contextAnchors.append(view) }
             strip.onEmpty = { emptyCount += 1 }
-            strip.update(items: items, readings: [:], appearance: BarAppearance(), maxWidth: 160)
+            strip.update(items: items, readings: [:], appearance: BarAppearance(), maxWidth: 120)
             button.image = try XCTUnwrap(strip.renderStatusImage(width: 160, height: 28, appearance: NSAppearance(named: .aqua)!, highlighted: false))
             let overflow = try XCTUnwrap(strip.subviews.first { $0.identifier?.rawValue == "overflow" })
             let point = NSPoint(x: overflow.frame.midX, y: overflow.frame.midY)

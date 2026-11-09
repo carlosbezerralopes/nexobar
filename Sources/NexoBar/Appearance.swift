@@ -49,11 +49,13 @@ enum IndicatorIconStyle: String, CaseIterable, Codable, Identifiable {
         }
         if self == .letters {
             let title: String
-            switch id { case .cpu: title = "C"; case .memory: title = "M"; case .gpu: title = "G"; case .ssd: title = "S"; case .cpuTemperature: title = "C°"; case .gpuTemperature: title = "G°"; case .ssdTemperature: title = "S°"; default: title = "?" }
-            let image = NSImage(size: NSSize(width: 18, height: 16), flipped: false) { _ in
-                let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11, weight: .bold), .foregroundColor: NSColor.labelColor]
+            // Short hardware names, as on Windows: CPU, GPU, SSD, RAM.
+            switch id { case .cpu: title = "CPU"; case .memory: title = "RAM"; case .gpu: title = "GPU"; case .ssd: title = "SSD"; case .cpuTemperature: title = "C°"; case .gpuTemperature: title = "G°"; case .ssdTemperature: title = "S°"; default: title = "?" }
+            let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 9, weight: .bold), .foregroundColor: NSColor.labelColor]
+            let width = max(16, ceil((title as NSString).size(withAttributes: attrs).width) + 1)
+            let image = NSImage(size: NSSize(width: width, height: 16), flipped: false) { _ in
                 let size = (title as NSString).size(withAttributes: attrs)
-                (title as NSString).draw(at: NSPoint(x: (18-size.width)/2, y: (16-size.height)/2), withAttributes: attrs)
+                (title as NSString).draw(at: NSPoint(x: (width-size.width)/2, y: (16-size.height)/2), withAttributes: attrs)
                 return true
             }
             image.isTemplate = true

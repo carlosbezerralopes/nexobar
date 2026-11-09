@@ -251,6 +251,8 @@ private final class StatusIndicatorButton: NSButton {
     var onActivate: (() -> Void)?
     var onContext: ((NSEvent) -> Void)?
     private var mark: NSImage?
+    /// Word marks (CPU, RAM…) are wider than the 16 pt symbols.
+    private var markWidth: CGFloat = 16
     private var activityColor: NSColor?
     private var rows: [NSAttributedString] = []
     private var stacked = false
@@ -306,6 +308,7 @@ private final class StatusIndicatorButton: NSButton {
                    appearance: BarAppearance, layout: QuotaBarLayout, now: Date, detailedTime: Bool) {
         templateRendering = appearance.iconStyle.usesTemplateStatusImage
         mark = appearance.iconStyle.image(for: item.id)
+        markWidth = appearance.iconStyle == .letters && !item.id.isAI ? max(16, mark?.size.width ?? 16) : 16
         switch reading.activity?.state {
         case "working": activityColor = .systemBlue
         case "waiting": activityColor = .systemOrange
@@ -380,7 +383,8 @@ private final class StatusIndicatorButton: NSButton {
     }
 
     private func measure() {
-        contentWidth = ceil(8 + (mark == nil ? 0 : 21) + (rows.map { $0.size().width }.max() ?? 0) + 8)
+        // Tight padding: CPU · GPU · SSD · RAM plus an agent must fit beside the notch (480 pt budget).
+        contentWidth = ceil(6 + (mark == nil ? 0 : markWidth + 2) + (rows.map { $0.size().width }.max() ?? 0) + 5)
         needsDisplay = true
     }
 
@@ -396,21 +400,21 @@ private final class StatusIndicatorButton: NSButton {
             // Template images drawn directly into a custom view do not receive NSButton's tint.
             let renderedMark: NSImage
             if templateRendering || mark.isTemplate {
-                renderedMark = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { rect in
+                renderedMark = NSImage(size: NSSize(width: markWidth, height: 16), flipped: false) { rect in
                     mark.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1)
                     foreground.setFill()
                     rect.fill(using: .sourceIn)
                     return true
                 }
             } else { renderedMark = mark }
-            renderedMark.draw(in: NSRect(x: 8, y: (bounds.height - 16) / 2, width: 16, height: 16),
+            renderedMark.draw(in: NSRect(x: 6, y: (bounds.height - 16) / 2, width: markWidth, height: 16),
                       from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             if let activityColor {
                 (templateRendering ? NSColor.black : activityColor).setFill()
-                NSBezierPath(ovalIn: NSRect(x: 20, y: (bounds.height - 16) / 2, width: 4, height: 4)).fill()
+                NSBezierPath(ovalIn: NSRect(x: 2 + markWidth, y: (bounds.height - 16) / 2, width: 4, height: 4)).fill()
             }
         }
-        let x: CGFloat = mark == nil ? 8 : 29
+        let x: CGFloat = mark == nil ? 6 : 8 + markWidth
         let total = rows.reduce(CGFloat.zero) { $0 + $1.size().height }
         var y = (bounds.height - total) / 2
         for row in rows {
