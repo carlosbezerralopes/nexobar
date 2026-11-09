@@ -8,8 +8,7 @@ public struct WorkerReading: Codable, Equatable, Sendable {
         public var usada_gb: Double?; public var total_gb: Double?; public var instalada_gb: Double?; public var swap_gb: Double?
         public var displayTotal: Double? { instalada_gb ?? total_gb }
     }
-    /// GPU integrada Intel, só quando não há NVIDIA: % do tempo acordada (fora do RC6).
-    public struct IntegratedGPU: Codable, Equatable, Sendable { public var ativo: Double? }
+
     /// `uso` é espaço ocupado (df); o widget mostra `ativo` (% do tempo com E/S, como o Monitor de Recursos) e as taxas, quando o coletor publicar.
     public struct SSD: Codable, Equatable, Sendable {
         public var uso: Double?; public var livre_gb: Double?; public var temp: Double?
@@ -33,7 +32,6 @@ public struct WorkerReading: Codable, Equatable, Sendable {
     public var ventoinhas_rpm: [Double]?
     public var perfil: String?
     public var top_cpu: [Process]?
-    public var gpu_intel: IntegratedGPU?
     /// Sessões do Claude Code abertas no worker, quando o coletor publicar.
     public var claude_sessoes: Int?
 

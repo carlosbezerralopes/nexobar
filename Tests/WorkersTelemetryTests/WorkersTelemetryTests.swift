@@ -15,7 +15,7 @@ final class WorkersTelemetryTests: XCTestCase {
     }
 
     private let gpuWorker = #"{"v":1,"host":"worker-gpu","ts":1000,"hora":"x","cpu":{"uso":12.4,"temp":49,"load1":0.16},"ram":{"usada_gb":2.3,"total_gb":31,"instalada_gb":32,"swap_gb":0.8},"ssd":{"uso":21,"livre_gb":691,"temp":35},"gpu":{"uso":0,"temp":46,"vram_mb":1500,"vram_total_mb":6144,"watts":5.23,"processos":[{"pid":9,"vram_mb":200,"nome":"python"},{"pid":8,"vram_mb":1200,"nome":"comfy"}]},"ventoinhas_rpm":[0,2100],"perfil":"balanced","top_cpu":[{"pid":1,"cpu":0.0,"ram_mb":15,"nome":"systemd","cmd":""},{"pid":7,"cpu":35.5,"ram_mb":900,"nome":"ffmpeg","cmd":"ffmpeg -i"}],"ltx":null,"claude_sessoes":2,"recebido":1004}"#
-    private let cpuWorker = #"{"v":1,"host":"worker-cpu","ts":1000,"cpu":{"uso":3,"temp":null,"load1":0.5},"ram":{"usada_gb":4,"total_gb":16,"swap_gb":0},"ssd":{"uso":50,"livre_gb":100,"temp":null},"gpu":null,"gpu_intel":{"ativo":7},"ventoinhas_rpm":[],"top_cpu":[],"recebido":1002}"#
+    private let cpuWorker = #"{"v":1,"host":"worker-cpu","ts":1000,"cpu":{"uso":3,"temp":null,"load1":0.5},"ram":{"usada_gb":4,"total_gb":16,"swap_gb":0},"ssd":{"uso":50,"livre_gb":100,"temp":null},"gpu":null,"ventoinhas_rpm":[],"top_cpu":[],"recebido":1002}"#
 
     func testLoadsReadingsAndConnectionStatesWithoutInventingZeros() throws {
         try write("worker-gpu.json", gpuWorker)
@@ -36,8 +36,6 @@ final class WorkersTelemetryTests: XCTestCase {
                            .init(pid: 5, cpu: 1, ram_mb: nil, nome: "e", cmd: nil)]
         XCTAssertEqual(reading.topProcesses.map(\.nome), ["c", "d", "e"])
         XCTAssertEqual(gpu.reading?.ram?.displayTotal, 32, "total exibido é a RAM instalada")
-        XCTAssertNil(gpu.reading?.gpu_intel)
-        XCTAssertEqual(workers[0].reading?.gpu_intel?.ativo, 7)
         XCTAssertEqual(workers[0].reading?.ram?.displayTotal, 16, "sem instalada, usa o total do kernel")
         XCTAssertEqual(gpu.reading?.claude_sessoes, 2)
         XCTAssertNil(workers[0].reading?.claude_sessoes, "ausente não vira zero")

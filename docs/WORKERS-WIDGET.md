@@ -8,7 +8,7 @@ Widget WidgetKit (**NexoBar Workers**) que mostra, na mesa do Mac, a telemetria 
 
 | Arquivo | Uso no widget |
 |---|---|
-| `<worker>.json` | Última leitura (formato v1): CPU, RAM, SSD, GPU (`null` sem NVIDIA), ventoinhas, processos. No SSD, o widget usa `ativo` (% do tempo com E/S), `leitura_bs` e `escrita_bs` (bytes/s), como o disco no Windows; `uso` é espaço ocupado e não é exibido. RAM: o total exibido é `ram.instalada_gb` (soma dos pentes), não o `total_gb` utilizável. Sem NVIDIA, `gpu_intel.ativo` dá o % do tempo em que a GPU Intel ficou acordada (fora do RC6). Também lê `claude_sessoes` (sessões do Claude Code abertas no worker, sem contar o processo `remote-control`). Campos ausentes, como num worker com coletor antigo, aparecem como "—". |
+| `<worker>.json` | Última leitura (formato v1): CPU, RAM, SSD, GPU (`null` sem NVIDIA), ventoinhas, processos. No SSD, o widget usa `ativo` (% do tempo com E/S), `leitura_bs` e `escrita_bs` (bytes/s), como o disco no Windows; `uso` é espaço ocupado e não é exibido. RAM: o total exibido é `ram.instalada_gb` (soma dos pentes), não o `total_gb` utilizável. Também lê `claude_sessoes` (sessões do Claude Code abertas no worker, sem contar o processo `remote-control`). Campos ausentes, como num worker com coletor antigo, aparecem como "—". |
 | `<worker>.estado.json` | `conectando`, `conectado` ou `desconectado`, com o detalhe do SSH. |
 | `<worker>/AAAA-MM-DD.jsonl` | Histórico de 30 s. Ainda não exibido; o caminho está em `WorkersTelemetry.historyURL`. |
 

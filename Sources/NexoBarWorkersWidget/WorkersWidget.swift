@@ -150,8 +150,6 @@ struct WorkerCard: View {
             if let gpu = r.gpu {
                 let base = [WorkerFormat.percent(gpu.uso), WorkerFormat.temperature(gpu.temp), WorkerFormat.watts(gpu.watts)]
                 row("GPU", base + [WorkerFormat.vram(used: gpu.vram_mb, total: gpu.vram_total_mb)], fallback: base)
-            } else if let intel = r.gpu_intel {
-                row("GPU", [WorkerFormat.percent(intel.ativo), "Intel"])
             } else {
                 row("GPU", ["sem GPU"], secondary: true)
             }
