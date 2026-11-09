@@ -120,7 +120,8 @@ struct WorkerPositionView: View {
                     Image(systemName: "moon.zzz").foregroundStyle(.orange)
                     Text("\(sleeping.name) está desconectado.")
                     Spacer()
-                    Button(waker.running.contains(sleeping.id) ? "Acordando…" : "Acordar") { waker.wake(sleeping.id) }
+                    // Fecha a janela: o andamento aparece no cartão ("acordando", em laranja) e o processo segue sem ela.
+                    Button(waker.running.contains(sleeping.id) ? "Acordando…" : "Acordar") { waker.wake(sleeping.id); onCancel() }
                         .disabled(waker.running.contains(sleeping.id))
                 }
                 if let line = waker.lastLine[sleeping.id] {
