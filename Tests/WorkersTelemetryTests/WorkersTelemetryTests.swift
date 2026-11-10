@@ -14,7 +14,7 @@ final class WorkersTelemetryTests: XCTestCase {
         try Data(json.utf8).write(to: directory.appendingPathComponent(name))
     }
 
-    private let gpuWorker = #"{"v":1,"host":"worker-gpu","ts":1000,"hora":"x","cpu":{"uso":12.4,"temp":49,"load1":0.16},"ram":{"usada_gb":2.3,"total_gb":31,"instalada_gb":32,"swap_gb":0.8},"ssd":{"uso":21,"livre_gb":691,"temp":35},"gpu":{"uso":0,"temp":46,"vram_mb":1500,"vram_total_mb":6144,"watts":5.23,"processos":[{"pid":9,"vram_mb":200,"nome":"python"},{"pid":8,"vram_mb":1200,"nome":"comfy"}]},"ventoinhas_rpm":[0,2100],"perfil":"balanced","top_cpu":[{"pid":1,"cpu":0.0,"ram_mb":15,"nome":"systemd","cmd":""},{"pid":7,"cpu":35.5,"ram_mb":900,"nome":"ffmpeg","cmd":"ffmpeg -i"}],"ltx":null,"claude_sessoes":2,"recebido":1004}"#
+    private let gpuWorker = #"{"v":1,"host":"worker-gpu","ts":1000,"hora":"x","cpu":{"uso":12.4,"temp":49,"load1":0.16},"ram":{"usada_gb":2.3,"total_gb":31,"instalada_gb":32,"swap_gb":0.8},"ssd":{"uso":21,"livre_gb":691,"temp":35},"gpu":{"uso":0,"temp":46,"vram_mb":1500,"vram_total_mb":6144,"watts":5.23,"processos":[{"pid":9,"vram_mb":200,"nome":"python"},{"pid":8,"vram_mb":1200,"nome":"comfy"}]},"ventoinhas_rpm":[0,2100],"perfil":"balanced","top_cpu":[{"pid":1,"cpu":0.0,"ram_mb":15,"nome":"systemd","cmd":""},{"pid":7,"cpu":35.5,"ram_mb":900,"nome":"ffmpeg","cmd":"ffmpeg -i"}],"ltx":null,"claude_sessoes":2,"uptime_s":273600,"recebido":1004}"#
     private let cpuWorker = #"{"v":1,"host":"worker-cpu","ts":1000,"cpu":{"uso":3,"temp":null,"load1":0.5},"ram":{"usada_gb":4,"total_gb":16,"swap_gb":0},"ssd":{"uso":50,"livre_gb":100,"temp":null},"gpu":null,"ventoinhas_rpm":[],"top_cpu":[],"recebido":1002}"#
 
     func testLoadsReadingsAndConnectionStatesWithoutInventingZeros() throws {
@@ -38,6 +38,8 @@ final class WorkersTelemetryTests: XCTestCase {
         XCTAssertEqual(gpu.reading?.ram?.displayTotal, 32, "total exibido é a RAM instalada")
         XCTAssertEqual(workers[0].reading?.ram?.displayTotal, 16, "sem instalada, usa o total do kernel")
         XCTAssertEqual(gpu.reading?.claude_sessoes, 2)
+        XCTAssertEqual(gpu.reading?.uptime_s, 273600)
+        XCTAssertNil(workers[0].reading?.uptime_s, "coletor antigo: sem uptime")
         XCTAssertNil(workers[0].reading?.claude_sessoes, "ausente não vira zero")
         XCTAssertEqual(gpu.connection?.estado, .conectado)
         let cpu = workers[0]
@@ -106,6 +108,11 @@ final class WorkersTelemetryTests: XCTestCase {
         XCTAssertEqual(WorkerFormat.vram(used: 1229, total: 6144), "1,2/6 GB")
         XCTAssertEqual(WorkerFormat.vram(used: nil, total: 6144), "—")
         XCTAssertEqual(WorkerFormat.count(nil), "—")
+        XCTAssertEqual(WorkerFormat.uptime(273600), "3d 4h")
+        XCTAssertEqual(WorkerFormat.uptime(18720), "5h 12min")
+        XCTAssertEqual(WorkerFormat.uptime(2559), "42 min")
+        XCTAssertEqual(WorkerFormat.uptime(nil), "—")
+        XCTAssertEqual(WorkerFormat.uptime(-1), "—")
         XCTAssertEqual(WorkerFormat.fans(nil), "—")
         let utc = TimeZone(identifier: "UTC")!
         XCTAssertEqual(WorkerFormat.time(Date(timeIntervalSince1970: 3661), timeZone: utc), "01:01:01")

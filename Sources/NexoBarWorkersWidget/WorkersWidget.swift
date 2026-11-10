@@ -128,14 +128,18 @@ struct WorkerCard: View {
         .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(.background.opacity(0.35)))
     }
 
-    /// Processos, hora da leitura e, à direita da hora, as sessões do Claude. No médio, só o maior processo, para caber em altura.
+    /// Processos, hora da leitura e, à direita da hora, as sessões do Claude (Mac) ou o tempo ligado (workers). No médio, só o maior processo, para caber em altura.
     @ViewBuilder private var footer: some View {
         let processes = reading?.topProcesses ?? []
         let gpu = reading?.topGPU
         let timeLine = HStack(spacing: 4) {
             Text(WorkerFormat.time(worker.sampledAt)).monospacedDigit()
             Spacer(minLength: 2)
-            if let reading { Text("Claude \(WorkerFormat.count(reading.claude_sessoes))").monospacedDigit() }
+            // As sessões do Claude Desktop nos workers rodam presas ao Mac: só o Mac mostra a contagem; os workers, o tempo ligado.
+            if let reading {
+                Text(worker.id == WorkersTelemetry.macID ? "Claude \(WorkerFormat.count(reading.claude_sessoes))"
+                                                         : "ligado \(WorkerFormat.uptime(reading.uptime_s))").monospacedDigit()
+            }
         }
         .font(.system(size: 9)).foregroundStyle(.secondary)
         VStack(alignment: .leading, spacing: 0) {

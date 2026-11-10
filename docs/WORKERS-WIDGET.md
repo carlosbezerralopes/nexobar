@@ -8,13 +8,13 @@ Widget WidgetKit (**NexoBar Workers**) que mostra, na mesa do Mac, o próprio Ma
 
 | Arquivo | Uso no widget |
 |---|---|
-| `<worker>.json` | Última leitura (formato v1): CPU, RAM, SSD, GPU (`null` sem NVIDIA), ventoinhas, processos. No SSD, o widget usa `ativo` (% do tempo com E/S), `leitura_bs` e `escrita_bs` (bytes/s), como o disco no Windows; `uso` é espaço ocupado e não é exibido. RAM: o total exibido é `ram.instalada_gb` (soma dos pentes), não o `total_gb` utilizável. Também lê `claude_sessoes` (sessões do Claude Code abertas no worker, sem contar o processo `remote-control`). Campos ausentes, como num worker com coletor antigo, aparecem como "—". |
+| `<worker>.json` | Última leitura (formato v1): CPU, RAM, SSD, GPU (`null` sem NVIDIA), ventoinhas, processos. No SSD, o widget usa `ativo` (% do tempo com E/S), `leitura_bs` e `escrita_bs` (bytes/s), como o disco no Windows; `uso` é espaço ocupado e não é exibido. RAM: o total exibido é `ram.instalada_gb` (soma dos pentes), não o `total_gb` utilizável. Também lê `claude_sessoes` (sessões do Claude Code abertas no worker, sem contar o processo `remote-control`), exibido só no cartão do Mac, e `uptime_s` (segundos desde o boot, de `/proc/uptime`). Campos ausentes, como num worker com coletor antigo, aparecem como "—". |
 | `<worker>.estado.json` | `conectando`, `conectado` ou `desconectado`, com o detalhe do SSH. |
 | `<worker>/AAAA-MM-DD.jsonl` | Histórico de 30 s. Ainda não exibido; o caminho está em `WorkersTelemetry.historyURL`. |
 
 ## Comportamento
 
-- Um cartão por worker, na ordem CPU · GPU · SSD · RAM, com temperaturas, watts da GPU, ventoinha e sessões do Claude, os três processos que mais usam CPU, só os que arredondam para 1% ou mais (só o maior no tamanho médio; % do `top`, em que 100% é um núcleo) e o maior processo na GPU, quando houver. A memória da GPU fica numa linha própria (VRAM), logo abaixo da GPU, nos tamanhos grande e extragrande; as taxas do SSD só aparecem quando cabem.
+- Um cartão por worker, na ordem CPU · GPU · SSD · RAM, com temperaturas, watts da GPU, ventoinha, tempo ligado ("ligado 3d 4h"; no cartão do Mac, as sessões do Claude, porque as sessões do Claude Desktop nos workers ficam presas ao Mac), os três processos que mais usam CPU, só os que arredondam para 1% ou mais (só o maior no tamanho médio; % do `top`, em que 100% é um núcleo) e o maior processo na GPU, quando houver. A memória da GPU fica numa linha própria (VRAM), logo abaixo da GPU, nos tamanhos grande e extragrande; as taxas do SSD só aparecem quando cabem.
 - A hora da leitura fica sempre visível, na última linha do cartão, para o apelido ocupar a largura do cabeçalho. Leitura recebida há mais de 60 s, worker desconectado ou conectando aparece esmaecido como desatualizado. A timeline já traz a entrada em que cada cartão expira, sem depender de recarga.
 - Ausência não é zero: campo sem leitura aparece como "—"; worker sem NVIDIA mostra "sem GPU".
 - Tamanhos: médio (2 cartões, sem load/watts/swap), grande (até 4) e extragrande (até 4 lado a lado).

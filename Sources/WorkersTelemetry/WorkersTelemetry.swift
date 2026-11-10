@@ -34,6 +34,8 @@ public struct WorkerReading: Codable, Equatable, Sendable {
     public var top_cpu: [Process]?
     /// Sessões do Claude Code abertas no worker, quando o coletor publicar.
     public var claude_sessoes: Int?
+    /// Segundos desde o boot, no momento da leitura, quando o coletor publicar.
+    public var uptime_s: Double?
 
     public var topCPU: Process? { topProcesses.first }
     /// Até três processos com mais CPU, do maior para o menor; só os que arredondam para 1% ou mais.
@@ -251,6 +253,14 @@ public enum WorkerFormat {
         let mega = max(read, write) >= 1_048_576, unit: Double = mega ? 1_048_576 : 1024
         func f(_ v: Double) -> String { number(v / unit, digits: mega && v / unit < 10 ? 1 : 0) }
         return "L \(f(read)) E \(f(write)) \(mega ? "MB/s" : "KB/s")"
+    }
+    /// Tempo ligado, do maior para o menor par de unidades: "42 min", "5h 12min", "3d 4h".
+    public static func uptime(_ v: Double?) -> String {
+        guard let s = valid(v).map({ Int($0) }) else { return missing }
+        let d = s / 86400, h = s % 86400 / 3600, m = s % 3600 / 60
+        if d > 0 { return "\(d)d \(h)h" }
+        if h > 0 { return "\(h)h \(m)min" }
+        return "\(m) min"
     }
     public static func count(_ v: Int?) -> String { v.flatMap { $0 >= 0 ? "\($0)" : nil } ?? missing }
     /// VRAM em GB com uma casa, para caber junto dos watts: "1,2/6 GB".
