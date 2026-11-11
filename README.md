@@ -18,6 +18,7 @@ Indicadores de hardware e limites de uso em uma barra compacta, com interface em
 - **Cotas de IA e horários de renovação** informados pelos clientes compatíveis. Uma janela semanal aparece sozinha quando não existe uma janela de sessão.
 - **Detalhes por indicador**, com gráficos de hardware dos últimos cinco minutos mantidos somente em memória.
 - **Workers Ubuntu na mesa do Mac** (macOS): widget com CPU, GPU, SSD, RAM, temperaturas, ventoinha e processos lidos da telemetria publicada pelo coletor `telemetria-workers`. Veja o [widget dos workers](docs/WORKERS-WIDGET.md).
+- **Fila de trabalho na mesa do Mac** (macOS): widget grande ou extragrande com o que roda em cada máquina, as vagas, a espera, as falhas e a contagem de feitos da fila distribuída de GPU do `~/.agents`. Veja a [fila de trabalho](docs/WORKERS-WIDGET.md#fila-de-trabalho).
 - **Uma barra do seu jeito:** ordem, nomes, visibilidade, estilos, memória em GB ou percentual e cotas em uma ou duas linhas.
 
 Uma leitura ausente aparece como indisponível. O NexoBar não transforma ausência em zero nem usa consumo de CPU/GPU para inferir a atividade de uma tarefa de IA. Um contador que chegou a zero também não confirma que a cota foi renovada.

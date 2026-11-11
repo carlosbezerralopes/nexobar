@@ -203,3 +203,68 @@ final class WakeMarksTests: XCTestCase {
         XCTAssertEqual(WorkersTelemetry.loadAll(workers: workers, app: app, now: start).map(\.id), ["worker-a"], "acordando.json não vira cartão")
     }
 }
+
+final class QueueTelemetryTests: XCTestCase {
+    private let panelJSON = #"""
+    {"formato":"fila-painel@1","mestre":"worker-aurora-note","gerado":10000,"vivo_s":120,"orfao_min":15,
+     "maquinas":[{"nome":"worker-aurora-desk","batimento":9990,"viva":true,"gpu_livre":0.0,"cpu_livre":850.0,"ram_livre_gb":8.0,"sistema":"linux","vram_gb":11.9},
+                 {"nome":"mac-carlos","batimento":null,"viva":false,"gpu_livre":null,"cpu_livre":null,"ram_livre_gb":null,"sistema":null,"vram_gb":null}],
+     "itens":[{"estado":"andamento","id":"sdxl","maquina":"worker-aurora-desk","t":9970,"buscado":false},
+              {"estado":"andamento","id":"orfao","maquina":"worker-velho","t":9000,"buscado":false},
+              {"estado":"livre","id":"b","maquina":null,"t":9500,"buscado":false},
+              {"estado":"chegando","id":"a","maquina":null,"t":9400,"buscado":false},
+              {"estado":"falha","id":"f1","maquina":null,"t":8000,"buscado":false},
+              {"estado":"falha","id":"f2","maquina":null,"t":9000,"buscado":false},
+              {"estado":"feito","id":"d1","maquina":null,"t":5000,"buscado":true},
+              {"estado":"feito","id":"d2","maquina":null,"t":6000,"buscado":false}]}
+    """#
+
+    func testPanelGroupsRunningWaitingFailuresAndCountsDone() throws {
+        let panel = try JSONDecoder().decode(QueuePanel.self, from: Data(panelJSON.utf8))
+        XCTAssertEqual(panel.running(on: "worker-aurora-desk").map(\.id), ["sdxl"])
+        XCTAssertEqual(panel.runningElsewhere.map(\.id), ["orfao"], "máquina fora da lista não some")
+        XCTAssertEqual(panel.waiting.map(\.id), ["a", "b"], "ordem de entrada")
+        XCTAssertEqual(panel.failures.map(\.id), ["f2", "f1"], "mais recente primeiro")
+        XCTAssertEqual(panel.doneCount, 2); XCTAssertEqual(panel.doneToFetch, 1)
+        let now = Date(timeIntervalSince1970: 10_000)
+        XCTAssertTrue(panel.isAlive(panel.maquinas![0], at: now))
+        XCTAssertFalse(panel.isAlive(panel.maquinas![0], at: now.addingTimeInterval(200)), "batimento velho vira desligado na hora de mostrar")
+        XCTAssertFalse(panel.isAlive(panel.maquinas![1], at: now), "sem batimento não é viva")
+        XCTAssertNil(QueueFormat.freeFraction(panel.maquinas![1].gpu_livre), "ausente não é zero")
+        XCTAssertEqual(QueueFormat.freeFraction(850), 0.85)
+        XCTAssertEqual(QueueFormat.age(since: 9970, to: now), "agora")
+        XCTAssertEqual(QueueFormat.age(since: 9000, to: now), "há 16 min")
+        var busy = panel
+        busy.itens = (0..<5).map { .init(estado: "andamento", id: "d\($0)", maquina: "worker-aurora-desk", t: 9_990) }
+            + (0..<2).map { .init(estado: "andamento", id: "m\($0)", maquina: "mac-carlos", t: 9_990) }
+        XCTAssertEqual(busy.runningLimit(budget: 4, maximum: 2), 1, "2 por máquina daria 3+2 linhas; 1 dá 2+2")
+        XCTAssertEqual(busy.runningLines(limit: 1), 4)
+        XCTAssertEqual(busy.runningLimit(budget: 8, maximum: 4), 4, "4+1 do desk e 2 do mac")
+        XCTAssertEqual(panel.runningLimit(budget: 4, maximum: 2), 2)
+    }
+
+    func testFailedReadKeepsThePreviousPanelAndTheReason() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("NexoBar/fila-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let first = QueueSnapshot().updated(output: Data(panelJSON.utf8), error: nil, now: Date(timeIntervalSince1970: 10_010))
+        XCTAssertNil(first.erro); XCTAssertEqual(first.painel?.mestre, "worker-aurora-note")
+        XCTAssertFalse(first.isStale(at: Date(timeIntervalSince1970: 10_100)))
+        XCTAssertTrue(first.isStale(at: Date(timeIntervalSince1970: 10_200)), "painel com mais de 3 min")
+        try first.save(directory: dir)
+        let failed = try XCTUnwrap(QueueSnapshot.load(directory: dir)).updated(output: nil, error: "mestre worker-aurora-note não responde\n", now: Date(timeIntervalSince1970: 10_070))
+        XCTAssertEqual(failed.erro, "mestre worker-aurora-note não responde")
+        XCTAssertEqual(failed.painel, first.painel, "falha conserva o painel anterior")
+        XCTAssertTrue(failed.isStale(at: Date(timeIntervalSince1970: 10_070)))
+        XCTAssertNotEqual(failed.signature, first.signature)
+        let junk = first.updated(output: Data("[]".utf8), error: nil, now: Date())
+        XCTAssertEqual(junk.erro, "painel da fila ilegível")
+    }
+
+    func testSignatureIgnoresReadTimeButNotQueueChanges() throws {
+        let panel = try JSONDecoder().decode(QueuePanel.self, from: Data(panelJSON.utf8))
+        let a = QueueSnapshot(painel: panel, lido: 1), b = QueueSnapshot(painel: panel, lido: 2)
+        XCTAssertEqual(a.signature, b.signature)
+        var moved = panel; moved.itens?[2].estado = "andamento"; moved.itens?[2].maquina = "mac-carlos"
+        XCTAssertNotEqual(QueueSnapshot(painel: moved, lido: 1).signature, a.signature)
+    }
+}

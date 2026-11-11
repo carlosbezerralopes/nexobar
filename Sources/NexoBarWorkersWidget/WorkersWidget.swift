@@ -34,7 +34,15 @@ enum WorkersLink {
     static func url(position: Int) -> URL { URL(string: "nexobar://workers/posicao/\(position)")! }
 }
 
+/// Uma extensão, dois widgets: os workers e a fila de trabalho.
 @main
+struct NexoBarWidgets: WidgetBundle {
+    var body: some Widget {
+        WorkersWidget()
+        QueueWidget()
+    }
+}
+
 struct WorkersWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: WorkersTelemetry.widgetKind, provider: WorkersProvider()) { entry in

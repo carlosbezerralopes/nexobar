@@ -2,7 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>com.apple.security.app-sandbox</key><true/>
-<!-- Somente leitura: pasta do coletor telemetria-workers e a do NexoBar com a leitura do Mac e as posições. -->
+<!-- Somente leitura: pasta do coletor telemetria-workers, a do NexoBar com a leitura do Mac e as posições e a da fila. -->
 <key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key>
-<array><string>/Library/Application Support/workers-telemetria/</string><string>/Library/Application Support/NexoBar/widget-workers/</string></array>
+<array><string>/Library/Application Support/workers-telemetria/</string><string>/Library/Application Support/NexoBar/widget-workers/</string><string>/Library/Application Support/NexoBar/widget-fila/</string></array>
 </dict></plist>

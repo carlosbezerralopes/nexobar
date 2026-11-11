@@ -226,6 +226,7 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSPopoverDeleg
     private var status: NSStatusItem?
     private var dashboard: Dashboard!
     private let workersWidget = WorkersWidgetReloader()
+    private let queueWidget = QueueWidgetReloader()
     private var popover = NSPopover()
     private var settingsWindow: NSWindow?
     private var workerWindow: NSWindow?
@@ -289,6 +290,7 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSPopoverDeleg
                                          memoryUsedBytes: readings[.memory]?.usedBytes)
         }
         workersWidget.start()
+        queueWidget.start()
         WorkerWaker.shared.onFinish = { [weak self] in self?.workersWidget.reload() }
         renderBar()
         if arguments.contains("--settings") { openSettings() }
@@ -521,7 +523,7 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSPopoverDeleg
         }
     }
 
-    /// Clique num cartão do widget: nexobar://workers/posicao/<n>. O handler de Apple Event é explícito porque o
+    /// Clique num cartão do widget: nexobar://workers/posicao/<n>; no widget da fila, nexobar://fila lê a fila na hora. O handler de Apple Event é explícito porque o
     /// `application(_:open:)` não recebeu o URL com o NSApplication montado à mão no `main`.
     @objc private func handleURLEvent(_ event: NSAppleEventDescriptor, withReplyEvent reply: NSAppleEventDescriptor) {
         guard let text = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue, let url = URL(string: text) else { return }
@@ -529,6 +531,7 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSPopoverDeleg
     }
 
     private func openURLs(_ urls: [URL]) {
+        if urls.contains(where: { $0.scheme == "nexobar" && $0.host == "fila" }) { queueWidget.refresh() }
         for url in urls where url.scheme == "nexobar" && url.host == "workers" {
             let parts = url.pathComponents.filter { $0 != "/" }
             if parts.count == 2, parts[0] == "posicao", let position = Int(parts[1]), (0..<WidgetLayoutConfig.positions).contains(position) {

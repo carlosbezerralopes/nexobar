@@ -22,13 +22,24 @@ Widget WidgetKit (**NexoBar Workers**) que mostra, na mesa do Mac, o próprio Ma
 - **Acordar**: se o worker do cartão clicado estiver desconectado, a janela oferece acordá-lo; o botão fecha a janela e o NexoBar roda `~/.agents/scripts/worker/acordar.sh <worker>` (Wake-on-LAN pela LAN de casa e espera do SSH, até 4 min); enquanto o script roda, o cartão fica "acordando" em laranja (marca em `NexoBar/widget-workers/acordando.json`, que vence em 5 min); sem o script, a opção não aparece. Worker sem WoL recebe do script a explicação de como liga.
 - O app NexoBar verifica a pasta a cada 5 s e pede ao WidgetKit a recarga quando um arquivo muda.
 
+## Fila de trabalho
+
+Segundo widget da mesma extensão (**Fila de trabalho**), só nos tamanhos grande e extragrande. Mostra a fila distribuída de GPU do `~/.agents` numa visualização:
+
+- **Contadores:** rodando, na fila (livre e chegando), falhas e feitos. Dos feitos, só a contagem e quantos faltam buscar.
+- **Máquinas, na ordem da fila:** vaga livre de GPU e CPU (barra cheia = livre; não é o uso do hardware) e RAM livre, com o que roda em cada uma e a idade da batida. Batida há 3 min ou mais fica laranja; na idade de órfão (`orfao_min`), vermelha. Sem batimento recente (`vivo_s`), a máquina aparece desligada.
+- **Na fila**, na ordem de entrada, e **falhas**, da mais recente. O grande mostra até 7 linhas de itens e o extragrande até 8 por coluna; o resto vira "+N".
+- **Clique:** lê a fila na hora (`nexobar://fila`).
+
+O NexoBar roda `pwsh ~/.agents/scripts/worker/fila.ps1 painel` a cada minuto, só com o widget na mesa, e grava `~/Library/Application Support/NexoBar/widget-fila/fila.json`. A consulta vai com `WORKER_NAO_ACORDAR=1`: não acorda o mestre desligado. Falha mantém o último painel, esmaecido, com o motivo no cabeçalho; painel com mais de 3 min também esmaece. Sem o script, nada roda.
+
 ## Mac
 
 O NexoBar grava `~/Library/Application Support/NexoBar/widget-workers/mac.json` a cada 5 s: CPU, memória, GPU e temperaturas do coletor do app; RAM instalada (`hw.memsize`), swap, SSD interno (tempo ativo e taxas do `IOBlockStorageDriver`, espaço livre do volume), ventoinhas (AppleSMC `F0Ac`…), três processos do `ps` (média recente do macOS, não a amostra instantânea do `top`) e sessões do Claude Code, incluindo as do app Claude. Da GPU, também: watts pelo IOReport (canal "GPU Energy", interface privada da Apple usada sem root, como no macmon; se mudar num macOS novo, os watts ficam ausentes) e memória em uso (IOAccelerator) sobre o limite que o macOS dá à GPU (`recommendedMaxWorkingSetSize`, cerca de 3/4 da RAM unificada, ex.: 37 de 48 GB). A temperatura do SSD não tem fonte sem root e fica fora.
 
 ## Sandbox e assinatura
 
-A extensão é sandbox e lê as duas pastas (coletor e NexoBar) pela exceção `com.apple.security.temporary-exception.files.home-relative-path.read-only` ([entitlements](../scripts/macos/WorkersWidget.entitlements)), sem app group nem cópia pelo app. Funciona com a assinatura local (ad-hoc) do preview; uma distribuição pela App Store exigiria outra estratégia.
+A extensão é sandbox e lê as três pastas (coletor, `widget-workers` e `widget-fila`) pela exceção `com.apple.security.temporary-exception.files.home-relative-path.read-only` ([entitlements](../scripts/macos/WorkersWidget.entitlements)), sem app group nem cópia pelo app. Funciona com a assinatura local (ad-hoc) do preview; uma distribuição pela App Store exigiria outra estratégia.
 
 O executável da extensão precisa entrar por `_NSExtensionMain` (`-e _NSExtensionMain` em `Package.swift`), como o Xcode faz. Com o `main` comum do Swift, o ExtensionFoundation para em `EXC_BREAKPOINT` antes de desenhar e o widget não aparece na galeria.
 
@@ -36,7 +47,7 @@ O executável da extensão precisa entrar por `_NSExtensionMain` (`-e _NSExtensi
 
 O [build.ps1](../scripts/build.ps1) monta a extensão em `Contents/PlugIns` e registra o esquema `nexobar://` no app, usado pelo clique (`nexobar://workers/posicao/<n>`).
 
-Ao mudar o tipo de configuração do widget, suba `CFBundleVersion`: o chronod guarda o descritor por versão. A versão 12 trocou o "Editar widget" (App Intents) pelo clique; widgets adicionados antes precisam ser removidos e adicionados de novo.
+Ao mudar o tipo de configuração ou a lista de widgets, suba `CFBundleVersion`: o chronod guarda o descritor por versão. A versão 12 trocou o "Editar widget" (App Intents) pelo clique; widgets adicionados antes precisam ser removidos e adicionados de novo. A 13 juntou o widget da fila.
 
 ## Diagnóstico
 

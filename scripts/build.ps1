@@ -2,7 +2,7 @@
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 $shortVersion = '0.4.0'
-$bundleVersion = '12'
+$bundleVersion = '13'
 Push-Location $projectRoot
 try {
     # Build outside cloud-backed Documents: File Provider FinderInfo breaks codesign.
@@ -46,7 +46,7 @@ try {
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
 "@ | Set-Content "$contents/Info.plist" -Encoding utf8NoBOM
-    # Widget de mesa (WidgetKit): extensão sandbox que só lê a pasta do coletor dos workers.
+    # Widgets de mesa (WidgetKit): extensão sandbox que só lê as pastas dos workers e da fila.
     $appex = Join-Path $contents 'PlugIns/NexoBarWorkers.appex'
     Remove-Item -Recurse -Force $appex -ErrorAction SilentlyContinue
     New-Item -ItemType Directory -Force "$appex/Contents/MacOS" | Out-Null
