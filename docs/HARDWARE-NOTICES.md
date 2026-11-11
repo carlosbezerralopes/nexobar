@@ -16,6 +16,8 @@ O uso de GPU vem do percentual publicado pelo driver em `IOAccelerator`. Havendo
 
 As APIs públicas de IOKit transportam um **protocolo AppleSMC privado e propriedades de driver sem contrato público de estabilidade**. Uso local fora de sandbox pode funcionar sem root; isso não comprova compatibilidade com App Sandbox, Mac App Store ou versões futuras do macOS.
 
+A temperatura do SSD usa os sensores NAND `TH0x`, `TH0a` e `TH0b` em Apple Silicon, medidos no M5 Pro (39–40 °C em 08/11/2026); chaves ausentes em outro chip deixam a temperatura indisponível.
+
 Há mapas explícitos para Apple M1–M5 e Intel. As gerações M1–M4 e Intel possuem associação baseada na fonte Stats, mas ainda não têm teste físico nesta entrega. Hardware desconhecido mostra indisponibilidade de temperatura, preservando o uso GPU quando o driver o expõe. M6/outros chips exigem nova validação e mapa; não há tentativa de adivinhar associação por prefixos.
 
 O monitor deve serializar chamadas em fila de utilidade. A coleta verifica um limite cooperativo de 2,5 s entre chamadas AppleSMC e descarta uma varredura incompleta. As chamadas síncronas de IOKit não oferecem cancelamento; o limite não interrompe uma chamada travada no kernel. No hardware testado, a varredura inteira levou menos de 10 ms.

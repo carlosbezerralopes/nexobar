@@ -146,6 +146,14 @@ enum ClaudeUsageParser {
         var lines: [String] = []
     }
 
+    /// The startup header names the plan ("Opus 5.5 · Claude Max"); /usage itself does not repeat it.
+    static func plan(_ screen: String) -> String? {
+        guard let regex = try? NSRegularExpression(pattern: #"·\s*Claude\s+([A-Za-z][A-Za-z ]{0,30}?)\s*$"#, options: .anchorsMatchLines),
+              let match = regex.firstMatch(in: screen, range: NSRange(screen.startIndex..., in: screen)),
+              let range = Range(match.range(at: 1), in: screen) else { return nil }
+        return BarText.plan(String(screen[range]))
+    }
+
     static func parse(_ screen: String, now: Date) throws -> IndicatorReading {
         guard screen.utf8.count <= 256 * 1024 else { throw AIReadError.excessiveOutput }
         let lower = screen.lowercased()

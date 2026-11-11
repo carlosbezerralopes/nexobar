@@ -251,8 +251,12 @@ private final class StatusIndicatorButton: NSButton {
     var onActivate: (() -> Void)?
     var onContext: ((NSEvent) -> Void)?
     private var mark: NSImage?
+    /// Word marks (CPU, RAM…) are wider than the 16 pt symbols.
+    private var markWidth: CGFloat = 16
     private var activityColor: NSColor?
     private var rows: [NSAttributedString] = []
+    /// Plan name drawn between the mark and the values, centered on all rows.
+    private var side: NSAttributedString?
     private var stacked = false
     private var templateRendering = false
     var statusItemHighlighted = false {
@@ -282,6 +286,7 @@ private final class StatusIndicatorButton: NSButton {
         templateRendering = template
         activityColor = nil
         mark = compact ? nil : identity.image(size: 16)
+        side = nil
         stacked = false
         rows = [text("NexoBar", percent: nil, stale: false, size: 11)]
         toolTip = "NexoBar · Personalizar indicadores"
@@ -294,6 +299,7 @@ private final class StatusIndicatorButton: NSButton {
         templateRendering = template
         activityColor = nil
         mark = nil
+        side = nil
         stacked = false
         rows = [text("+\(count)", percent: nil, stale: false, size: 11)]
         toolTip = "Mais \(count) indicadores · abrir detalhes"
@@ -306,6 +312,7 @@ private final class StatusIndicatorButton: NSButton {
                    appearance: BarAppearance, layout: QuotaBarLayout, now: Date, detailedTime: Bool) {
         templateRendering = appearance.iconStyle.usesTemplateStatusImage
         mark = appearance.iconStyle.image(for: item.id)
+        markWidth = appearance.iconStyle == .letters && !item.id.isAI ? max(16, mark?.size.width ?? 16) : 16
         switch reading.activity?.state {
         case "working": activityColor = .systemBlue
         case "waiting": activityColor = .systemOrange
@@ -317,13 +324,15 @@ private final class StatusIndicatorButton: NSButton {
         let displayedWindows = layout == .primary ? Array(quota.availableWindows.prefix(1)) : quota.availableWindows
         stacked = item.id.isAI && displayedWindows.count > 1 && layout == .stacked
         let prefix = item.showLabel ? item.label + " " : ""
+        let plan = appearance.showPlan && item.id.isAI ? reading.plan : nil
+        side = plan.map { text($0, percent: nil, stale: reading.isStale, size: 9) }
         let stale = reading.isStale
         if item.id.isAI && hasAccountWindows {
             if displayedWindows.isEmpty {
                 rows = [text(prefix + "—", percent: nil, stale: stale, size: 11)]
             } else {
                 let parts = displayedWindows.enumerated().map { index, window in
-                    let remaining = window.resetsAt.map { "·" + QuotaBarPresentation.remainingTime(reset: $0, now: now, detailedTime: detailedTime) } ?? ""
+                    let remaining = appearance.showQuotaReset ? window.resetsAt.map { BarText.separator + QuotaBarPresentation.remainingTime(reset: $0, now: now, detailedTime: detailedTime) } ?? "" : ""
                     return text((index == 0 ? prefix : "") + QuotaBarPresentation.value(for: window) + remaining,
                                 percent: window.usedPercent, stale: stale, size: stacked ? 9 : 11)
                 }
@@ -338,15 +347,14 @@ private final class StatusIndicatorButton: NSButton {
                 }
             }
         } else {
-            let value = reading.displayValue(memory: item.memoryDisplay)
+            // Same order as Windows: value · read/write · temperature · free space.
             let percent = Double(reading.value.replacingOccurrences(of: "%", with: ""))
-            rows = [text(prefix + value, percent: percent, stale: stale, size: 11)]
-        }
-        if let childReading {
-            let grouped = NSMutableAttributedString(attributedString: rows[0])
-            grouped.append(text(" · " + childReading.value.replacingOccurrences(of: " ", with: ""), percent: nil,
-                                stale: childReading.isStale, size: 11))
-            rows[0] = grouped
+            let line = NSMutableAttributedString(attributedString: text(prefix + reading.displayValue(memory: item.memoryDisplay), percent: percent, stale: stale, size: 11))
+            func append(_ part: String, stale partStale: Bool) { line.append(text(BarText.separator + part, percent: nil, stale: partStale, size: 11)) }
+            if item.showRates, let rates = reading.ratesText { append(rates, stale: stale) }
+            if let childReading { append(BarText.temperature(childReading.value), stale: childReading.isStale) }
+            if item.showFreeSpace, let free = reading.freeSpaceText { append(free, stale: stale) }
+            rows = [line]
         }
         func quotaDescription(_ window: QuotaWindow?, name: String) -> String {
             "\(name): \(QuotaBarPresentation.value(for: window)) · renova em \(QuotaBarPresentation.remainingTime(reset: window?.resetsAt, now: now, detailedTime: true))"
@@ -361,7 +369,7 @@ private final class StatusIndicatorButton: NSButton {
         if let childReading {
             toolTip = (toolTip ?? "") + "\n\(childReading.id.name): \(childReading.value) · \(childReading.detail)" + (childReading.isStale ? " · leitura antiga" : "")
         }
-        setAccessibilityLabel(item.label)
+        setAccessibilityLabel(item.label + (plan.map { " " + $0 } ?? ""))
         let accessibleValues: String
         if item.id.isAI && hasAccountWindows && layout != .primary {
             accessibleValues = accountDescriptions.joined(separator: ", ")
@@ -380,8 +388,11 @@ private final class StatusIndicatorButton: NSButton {
         return NSAttributedString(string: string, attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: size, weight: .medium), .foregroundColor: color])
     }
 
+    private var sideWidth: CGFloat { side.map { ceil($0.size().width) + 3 } ?? 0 }
+
     private func measure() {
-        contentWidth = ceil(8 + (mark == nil ? 0 : 21) + (rows.map { $0.size().width }.max() ?? 0) + 8)
+        // Tight padding: CPU · GPU · SSD · RAM plus an agent must fit beside the notch (480 pt budget).
+        contentWidth = ceil(6 + (mark == nil ? 0 : markWidth + 2) + sideWidth + (rows.map { $0.size().width }.max() ?? 0) + 5)
         needsDisplay = true
     }
 
@@ -397,21 +408,28 @@ private final class StatusIndicatorButton: NSButton {
             // Template images drawn directly into a custom view do not receive NSButton's tint.
             let renderedMark: NSImage
             if templateRendering || mark.isTemplate {
-                renderedMark = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { rect in
+                renderedMark = NSImage(size: NSSize(width: markWidth, height: 16), flipped: false) { rect in
                     mark.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1)
                     foreground.setFill()
                     rect.fill(using: .sourceIn)
                     return true
                 }
             } else { renderedMark = mark }
-            renderedMark.draw(in: NSRect(x: 8, y: (bounds.height - 16) / 2, width: 16, height: 16),
+            renderedMark.draw(in: NSRect(x: 6, y: (bounds.height - 16) / 2, width: markWidth, height: 16),
                       from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             if let activityColor {
                 (templateRendering ? NSColor.black : activityColor).setFill()
-                NSBezierPath(ovalIn: NSRect(x: 20, y: (bounds.height - 16) / 2, width: 4, height: 4)).fill()
+                NSBezierPath(ovalIn: NSRect(x: 2 + markWidth, y: (bounds.height - 16) / 2, width: 4, height: 4)).fill()
             }
         }
-        let x: CGFloat = mark == nil ? 8 : 29
+        if let side {
+            let size = side.size()
+            let start: CGFloat = mark == nil ? 6 : 8 + markWidth
+            let drawn = selected ? { let copy = NSMutableAttributedString(attributedString: side)
+                copy.addAttribute(.foregroundColor, value: NSColor.selectedMenuItemTextColor, range: NSRange(location: 0, length: copy.length)); return copy }() : side
+            drawn.draw(at: NSPoint(x: start, y: (bounds.height - size.height) / 2))
+        }
+        let x: CGFloat = (mark == nil ? 6 : 8 + markWidth) + sideWidth
         let total = rows.reduce(CGFloat.zero) { $0 + $1.size().height }
         var y = (bounds.height - total) / 2
         for row in rows {

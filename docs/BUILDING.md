@@ -54,7 +54,7 @@ Após extrair no Windows, `pwsh -NoProfile -File smoke-windows.ps1 -OpenUI` diag
 
 As gravações são atômicas. `--data-directory` permite separar testes do uso normal, incluindo pastas das CLIs. Fechar a janela de configuração mantém a coleta; **Sair** encerra o aplicativo.
 
-No Mac, o clique esquerdo abre o detalhe do indicador e o direito abre as opções. As setas alteram a ordem dentro do grupo NexoBar. Os estilos Sistema, Instrumentos, Contorno, Preenchido e Siglas são selecionáveis; a atualização preserva preferências. Temperaturas são opções filhas de CPU/GPU, sem ícone extra. Todos os indicadores ocultos mantêm acesso às opções; excedentes ficam em **+N**.
+No Mac, o clique esquerdo abre o detalhe do indicador e o direito abre as opções. As setas alteram a ordem dentro do grupo NexoBar. Os estilos Sistema, Instrumentos, Contorno, Preenchido e Siglas são selecionáveis; a atualização preserva preferências. Nomes e ordem padrão seguem o Windows: CPU · GPU · SSD · RAM, depois Claude · Codex · Kiro; o botão ↺ ao lado do nome alterna entre o nome curto e o do hardware (modelo da CPU/GPU/SSD) ou restaura o nome oficial. Temperaturas são opções filhas de CPU/GPU/SSD, sem ícone extra; o SSD tem ainda leitura/escrita e espaço livre, que começam desligados para a barra caber ao lado do notch (orçamento de 480 pt). Mostrar o tempo até renovar é opcional e independe dos nomes. O plano do Claude, lido do cabeçalho da mesma sessão `/usage` ("Opus 5.5 · Claude Max"), aparece ao lado do ícone (opção "Mostrar plano"); sem cabeçalho, nada é mostrado. Na barra a temperatura aparece como "67°"; o detalhe mantém °C. Preferências da 0.3.x migram uma vez: "Memória" vira "RAM" e a ordem padrão antiga passa à nova; nomes e ordens personalizados ficam como estavam. Todos os indicadores ocultos mantêm acesso às opções; excedentes ficam em **+N**.
 
 **Interação nos monitores**, no macOS, permite cliques no principal ou em todos; a duplicação da barra é controlada pelo sistema. Métricas não ativam o aplicativo; detalhes fecham ao trocar de Space. Essas escolhas não alteram a configuração de ocultação da barra do macOS.
 
@@ -65,7 +65,8 @@ No Mac, o clique esquerdo abre o detalhe do indicador e o direito abre as opçõ
 | CPU | Delta de ticks user + system + nice sobre total. | Delta de `GetSystemTimes`. |
 | Memória | Páginas ativas + wired + compressor, sobre RAM física; exclui cache inativo e pode diferir do Monitor de Atividade. | Total físico menos disponível de `GlobalMemoryStatusEx`. |
 | GPU | Maior percentual publicado pelo driver entre aceleradores; não soma GPUs. | Cada GPU do LibreHardwareMonitor tem leitura e identidade próprias. |
-| Temperatura | Máximo entre sensores válidos CPU/GPU; média e quantidade no detalhe. | Somente leituras fornecidas pelo backend e permitidas pelo driver. |
+| SSD | Tempo ativo e leitura/escrita pelo delta das estatísticas `IOBlockStorageDriver` do disco interno de estado sólido (o leitor SD interno é ignorado); espaço livre do volume de inicialização em unidades decimais, como o Finder. A atividade aparece a partir da segunda amostra. | Contadores `IOCTL_DISK_PERFORMANCE` por disco físico. |
+| Temperatura | Máximo entre sensores válidos CPU/GPU/SSD (NAND); média e quantidade no detalhe. | Somente leituras fornecidas pelo backend e permitidas pelo driver. |
 
 A primeira amostra de CPU é desconhecida. Memória é exibida em GB (base 1.073.741.824 bytes), em uso/total por padrão; percentual é uma opção. Sensores atualizam a cada três segundos. Gráficos mantêm até cinco minutos em RAM e expiram mesmo se o sensor parar de responder. Não há controle de ventoinha, tensão, frequência ou potência.
 

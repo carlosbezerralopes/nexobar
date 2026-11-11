@@ -39,7 +39,7 @@ struct IndicatorGlyph: View {
     var style: IndicatorIconStyle = .outline
     var body: some View {
         if let image = style.image(for: id) {
-            Image(nsImage: image).renderingMode(.template).resizable().scaledToFit().frame(width: 16, height: 16).accessibilityLabel(id.name)
+            Image(nsImage: image).renderingMode(.template).resizable().scaledToFit().frame(width: style == .letters && !id.isAI ? max(16, image.size.width) : 16, height: 16).accessibilityLabel(id.name)
         }
     }
 }

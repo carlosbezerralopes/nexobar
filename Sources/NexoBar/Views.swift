@@ -12,9 +12,10 @@ struct IndicatorDetailView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 IndicatorGlyph(id: id, style: model.appearance.iconStyle).foregroundStyle(.teal)
-                Text(item.label.isEmpty ? id.name : item.label).font(.title2.bold())
+                Text((item.label.isEmpty ? id.name : item.label) + (reading?.plan.map { " " + $0 } ?? "")).font(.title2.bold())
                 Spacer()
                 Text(reading?.displayValue(memory: item.memoryDisplay) ?? "—").font(.system(.title2, design: .monospaced).weight(.semibold))
+                    .lineLimit(1).minimumScaleFactor(0.6)
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
@@ -23,6 +24,13 @@ struct IndicatorDetailView: View {
                         HStack {
                             memoryValue("Em uso", bytes: used); Spacer(); memoryValue("Total", bytes: total); Spacer()
                             VStack(alignment: .leading) { Text("Uso").font(.caption).foregroundStyle(.secondary); Text(reading.value).font(.title3.monospacedDigit()) }
+                        }.padding(12).background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
+                    }
+                    if id == .ssd, let reading {
+                        HStack {
+                            VStack(alignment: .leading) { Text("Leitura/escrita").font(.caption).foregroundStyle(.secondary); Text(reading.ratesText ?? "—").font(.title3.monospacedDigit()) }
+                            Spacer()
+                            VStack(alignment: .leading) { Text("Espaço livre").font(.caption).foregroundStyle(.secondary); Text(reading.freeSpaceText ?? "—").font(.title3.monospacedDigit()) }
                         }.padding(12).background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
                     }
                     if reading?.isStale == true { Label("Leitura antiga · aguardando atualização", systemImage: "clock.badge.exclamationmark").font(.caption).foregroundStyle(.orange) }
@@ -36,8 +44,8 @@ struct IndicatorDetailView: View {
                     }
                     if let points = model.history[id], points.count > 1 {
                         Chart(points) { point in LineMark(x: .value("Hora", point.time), y: .value("Leitura", point.value)).foregroundStyle(.teal) }
-                            .chartYScale(domain: 0...((id == .cpuTemperature || id == .gpuTemperature) ? 120.0 : 100.0))
-                            .chartYAxisLabel(id == .cpuTemperature || id == .gpuTemperature ? "°C" : "%").frame(height: 120)
+                            .chartYScale(domain: 0...(id.isNested ? 120.0 : 100.0))
+                            .chartYAxisLabel(id.isNested ? "°C" : "%").frame(height: 120)
                         Text("Últimos 5 minutos · somente nesta execução").font(.caption2).foregroundStyle(.secondary)
                     }
                     ForEach(Array((reading?.windows ?? []).enumerated()), id: \.offset) { _, window in
@@ -64,7 +72,7 @@ struct IndicatorDetailView: View {
         }.padding(18).frame(width: 420).background(Color(nsColor: .windowBackgroundColor))
     }
     private func memoryValue(_ label: String, bytes: Double) -> some View {
-        VStack(alignment: .leading) { Text(label).font(.caption).foregroundStyle(.secondary); Text(String(format: "%.1f GiB", bytes / 1_073_741_824)).font(.title3.monospacedDigit()) }
+        VStack(alignment: .leading) { Text(label).font(.caption).foregroundStyle(.secondary); Text("\(BarText.decimal(bytes / 1_073_741_824)) GB").font(.title3.monospacedDigit()) }
     }
 }
 
@@ -136,10 +144,13 @@ struct SettingsView: View {
                 Picker("Limites de IA", selection: Binding(get: { model.appearance.quotaLayout }, set: { layout in var value = model.appearance; value.quotaLayout = layout; model.updateAppearance(value) })) {
                     Text("Horizontal").tag(QuotaBarLayout.inline); Text("Duas linhas").tag(QuotaBarLayout.stacked)
                 }.pickerStyle(.segmented).frame(width: 320)
+                Toggle("Mostrar tempo até renovar", isOn: Binding(get: { model.appearance.showQuotaReset }, set: { shown in var value = model.appearance; value.showQuotaReset = shown; model.updateAppearance(value) })).font(.caption)
+                Toggle("Mostrar plano", isOn: Binding(get: { model.appearance.showPlan }, set: { shown in var value = model.appearance; value.showPlan = shown; model.updateAppearance(value) })).font(.caption)
                 Toggle("Detalhar tempo restante", isOn: Binding(get: { model.appearance.detailedTime }, set: { detailed in var value = model.appearance; value.detailedTime = detailed; model.updateAppearance(value) })).font(.caption)
+                    .disabled(!model.appearance.showQuotaReset)
                 Spacer()
             }
-            Text("Só aparecem os limites informados pelo plano. Um único limite ocupa uma linha. Tempo compacto: 2h · 3d; detalhado: 2h13m · 3d4h.").font(.caption2).foregroundStyle(.secondary)
+            Text("Só aparecem os limites informados pelo plano. Um único limite ocupa uma linha. O tempo até renovar independe dos nomes. Compacto: 2h · 3d; detalhado: 2h13m · 3d4h.").font(.caption2).foregroundStyle(.secondary)
             Toggle("Avisar quando a cota renovar", isOn: Binding(get: { model.appearance.notifyResets }, set: { enabled in var value = model.appearance; value.notifyResets = enabled; model.updateAppearance(value) })).font(.caption)
             HStack {
                 Picker("Interação", selection: Binding(get: { model.appearance.interactionDisplay }, set: { display in var value = model.appearance; value.interactionDisplay = display; model.updateAppearance(value) })) {
@@ -235,13 +246,21 @@ struct SettingsView: View {
     private func indicatorRow(_ item: IndicatorConfiguration, index: Int) -> some View {
         HStack(spacing: 10) {
             Toggle("", isOn: Binding(get: { current(item).enabled }, set: { enabled in var edit = current(item); edit.enabled = enabled; model.update(edit) })).labelsHidden().toggleStyle(.switch).controlSize(.small).accessibilityLabel("Mostrar \(item.id.name)")
-            IndicatorGlyph(id: item.id, style: model.appearance.iconStyle).frame(width: 20).foregroundStyle(item.id.isAI ? .purple : .teal)
+            IndicatorGlyph(id: item.id, style: model.appearance.iconStyle).frame(width: 28).foregroundStyle(item.id.isAI ? .purple : .teal)
             TextField(item.id.name, text: Binding(get: { current(item).label }, set: { label in var edit = current(item); edit.label = label; model.update(edit) })).textFieldStyle(.roundedBorder).frame(width: 150)
+            Button { model.restoreLabel(item.id) } label: { Image(systemName: "arrow.counterclockwise") }
+                .buttonStyle(.borderless).disabled(model.alternateLabel(for: item.id) == nil)
+                .help(model.alternateLabel(for: item.id).map { "Usar “\($0)”" } ?? "Nome oficial em uso")
+                .accessibilityLabel("Restaurar nome de \(item.id.name)")
             Toggle("Nome", isOn: Binding(get: { current(item).showLabel }, set: { show in var edit = current(item); edit.showLabel = show; model.update(edit) })).font(.caption).frame(width: 65)
             if let child = item.id.temperatureChild {
-                Menu(item.id.name) {
+                Menu("Opções") {
                     Toggle("Mostrar temperatura", isOn: Binding(get: { model.items.first(where: { $0.id == child })?.enabled ?? false }, set: { enabled in model.setTemperature(item.id, enabled: enabled) }))
-                }.frame(width: 75)
+                    if item.id == .ssd {
+                        Toggle("Mostrar leitura/escrita", isOn: Binding(get: { current(item).showRates }, set: { shown in var edit = current(item); edit.showRates = shown; model.update(edit) }))
+                        Toggle("Mostrar espaço livre", isOn: Binding(get: { current(item).showFreeSpace }, set: { shown in var edit = current(item); edit.showFreeSpace = shown; model.update(edit) }))
+                    }
+                }.frame(width: 85)
             }
             if item.id == .memory {
                 Picker("Formato", selection: Binding(get: { current(item).memoryDisplay }, set: { format in var edit = current(item); edit.memoryDisplay = format; model.update(edit) })) {
@@ -249,7 +268,7 @@ struct SettingsView: View {
                 }.labelsHidden().frame(width: 130)
             }
             Spacer(minLength: 4)
-            Text(model.readings[item.id]?.displayValue(memory: item.memoryDisplay) ?? "—").font(.caption.monospacedDigit()).foregroundStyle(.secondary).lineLimit(1)
+            Text(model.readings[item.id]?.barValue(item: current(item), temperature: nil) ?? "—").font(.caption.monospacedDigit()).foregroundStyle(.secondary).lineLimit(1)
             Button { model.move(item.id, offset: -1) } label: { Image(systemName: "arrow.up") }.disabled(index == 0).accessibilityLabel("Mover \(item.id.name) antes")
             Button { model.move(item.id, offset: 1) } label: { Image(systemName: "arrow.down") }.disabled(index == topLevelItems.count - 1).accessibilityLabel("Mover \(item.id.name) depois")
         }

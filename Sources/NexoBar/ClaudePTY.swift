@@ -86,6 +86,7 @@ enum ClaudePTY {
         var buffer = [UInt8](repeating: 0, count: 16_384)
         let started = ProcessInfo.processInfo.systemUptime
         var requestSentAt: TimeInterval?
+        var plan: String?
         var lastText = "", changedAt = started
         while ProcessInfo.processInfo.systemUptime - started < min(timeout, 45) {
             while true {
@@ -102,6 +103,7 @@ enum ClaudePTY {
             if text != lastText { lastText = text; changedAt = tick }
             if requestSentAt == nil, isInitialPrompt(text) {
                 // The only submitted command. Never answer trust/setup/login prompts.
+                plan = ClaudeUsageParser.plan(text)
                 try send("/usage\r", master: master)
                 requestSentAt = tick
                 changedAt = tick
@@ -110,7 +112,10 @@ enum ClaudePTY {
                       !isLoading(text), text.contains("Current session") || text.contains("Current week") {
                 // Parsing may remain incomplete while the screen is being composed.
                 // Failed-load/auth/trust screens already aborted above; no fallback.
-                if let reading = try? ClaudeUsageParser.parse(text, now: now) { return reading }
+                if var reading = try? ClaudeUsageParser.parse(text, now: now) {
+                    reading.plan = plan ?? ClaudeUsageParser.plan(text)
+                    return reading
+                }
             }
             var status: Int32 = 0
             let waited = waitpid(pid, &status, WNOHANG)

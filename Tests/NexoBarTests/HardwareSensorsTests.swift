@@ -65,7 +65,7 @@ final class HardwareSensorsTests: XCTestCase {
             gpuTemperatures: [], temperatureDetail: "fixture sem hardware")
         let collector = HardwareSensors(readSnapshot: { snapshot }, date: { now })
         let first = collector.sample()
-        XCTAssertEqual(first.map(\.id), [.gpu, .cpuTemperature, .gpuTemperature])
+        XCTAssertEqual(first.map(\.id), [.gpu, .cpuTemperature, .gpuTemperature, .ssdTemperature])
         XCTAssertEqual(first[0].value, "12%")
         XCTAssertEqual(first[1].value, "60 °C")
         XCTAssertTrue(first[1].detail.contains("2 sensores"))

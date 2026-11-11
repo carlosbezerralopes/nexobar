@@ -18,7 +18,7 @@ final class AppearanceTests: XCTestCase {
     }
     func testNominalMemoryAndMissingTotals() {
         var reading = IndicatorReading(id: .memory, value: "83%", detail: "", sampledAt: Date(), usedBytes: 40 * 1_073_741_824, totalBytes: 48 * 1_073_741_824)
-        XCTAssertEqual(reading.displayValue(memory: .usedTotal), "40/48 GiB")
+        XCTAssertEqual(reading.displayValue(memory: .usedTotal), "40/48 GB")
         XCTAssertEqual(reading.displayValue(memory: .percentage), "83%")
         reading.totalBytes = nil
         XCTAssertEqual(reading.displayValue(memory: .usedTotal), "83%")
@@ -29,7 +29,7 @@ final class AppearanceTests: XCTestCase {
         await MainActor.run {
             let store = Dashboard(directory: directory)
             store.toggleTemperature(.cpu)
-            store.move(.gpu, offset: -1)
+            store.move(.memory, offset: -1)
             var appearance = store.appearance
             appearance.quotaLayout = .stacked; appearance.detailedTime = true; appearance.identity = .pulse
             store.updateAppearance(appearance)

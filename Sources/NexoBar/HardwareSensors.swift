@@ -13,6 +13,8 @@ struct HardwareSnapshot {
     var cpuTemperatures: [HardwareTemperature]
     var gpuTemperatures: [HardwareTemperature]
     var temperatureDetail: String
+    var ssdTemperatures: [HardwareTemperature] = []
+    var gpuName: String? = nil
 }
 
 /// Read-only collector. Serialize calls on a utility queue; it has no process, network or login path.
@@ -40,9 +42,12 @@ final class HardwareSensors {
         } else {
             gpu = .unavailable(.gpu, snapshot.gpuDetail)
         }
-        return [gpu,
+        var named = gpu
+        named.hardwareName = snapshot.gpuName
+        return [named,
                 temperature(.cpuTemperature, samples: snapshot.cpuTemperatures, detail: snapshot.temperatureDetail, now: now),
-                temperature(.gpuTemperature, samples: snapshot.gpuTemperatures, detail: snapshot.temperatureDetail, now: now)]
+                temperature(.gpuTemperature, samples: snapshot.gpuTemperatures, detail: snapshot.temperatureDetail, now: now),
+                temperature(.ssdTemperature, samples: snapshot.ssdTemperatures, detail: snapshot.temperatureDetail, now: now)]
     }
 
     private func temperature(_ id: IndicatorID, samples: [HardwareTemperature], detail: String, now: Date) -> IndicatorReading {
@@ -93,6 +98,12 @@ enum HardwareSensorDecoding {
         return nil
     }
 
+    /// NAND sensors of the Apple Silicon internal SSD (Stats names TH0x "NAND"). Measured on an M5 Pro on
+    /// 08/11/2026: TH0a 39,4 °C, TH0b 39,9 °C, TH0x 39,9 °C. Absent keys are omitted, never estimated.
+    static func ssdTemperatureKeys(model: String) -> [String] {
+        model.hasPrefix("Apple M") ? ["TH0x", "TH0a", "TH0b"] : []
+    }
+
     /// No prefix guessing: a key can identify different hardware in a different chip generation.
     static func temperatureKeys(model: String) -> (cpu: [String], gpu: [String])? {
         let words = model.split(separator: " ")
@@ -130,7 +141,8 @@ final class HardwareSensorSystem {
         let deadline = ProcessInfo.processInfo.systemUptime + 2.5
         let accelerators = readAccelerators()
         let models = accelerators.compactMap { $0.model }
-        let model = Self.cpuBrand() ?? models.first(where: { $0.contains("Apple M") }) ?? "hardware desconhecido"
+        let model = HardwareNames.cpu ?? models.first(where: { $0.contains("Apple M") }) ?? "hardware desconhecido"
+        let gpuName = models.first
         let utilizations = accelerators.compactMap { HardwareSensorDecoding.gpuUsage($0.statistics) }
         let gpuDetail = utilizations.isEmpty
             ? "IOAccelerator não forneceu um contador de utilização válido nesta coleta."
@@ -138,11 +150,11 @@ final class HardwareSensorSystem {
 
         guard let keys = HardwareSensorDecoding.temperatureKeys(model: model) else {
             return HardwareSnapshot(gpuPercent: utilizations.max(), gpuDetail: gpuDetail,
-                cpuTemperatures: [], gpuTemperatures: [], temperatureDetail: "Mapa AppleSMC ainda não validado para \(model).")
+                cpuTemperatures: [], gpuTemperatures: [], temperatureDetail: "Mapa AppleSMC ainda não validado para \(model).", gpuName: gpuName)
         }
         guard smc.open() else {
             return HardwareSnapshot(gpuPercent: utilizations.max(), gpuDetail: gpuDetail,
-                cpuTemperatures: [], gpuTemperatures: [], temperatureDetail: smc.lastError)
+                cpuTemperatures: [], gpuTemperatures: [], temperatureDetail: smc.lastError, gpuName: gpuName)
         }
         func temperatures(_ keys: [String]) -> [HardwareTemperature] {
             keys.compactMap { key in
@@ -152,11 +164,13 @@ final class HardwareSensorSystem {
         }
         let cpu = temperatures(keys.cpu)
         let gpu = temperatures(keys.gpu)
+        let ssd = temperatures(HardwareSensorDecoding.ssdTemperatureKeys(model: model))
         let timedOut = ProcessInfo.processInfo.systemUptime >= deadline
         // Partial sweeps would silently change which maximum is represented. Discard a timed-out sweep.
         return HardwareSnapshot(gpuPercent: utilizations.max(), gpuDetail: gpuDetail,
             cpuTemperatures: timedOut ? [] : cpu, gpuTemperatures: timedOut ? [] : gpu,
-            temperatureDetail: timedOut ? "Coleta excedeu 2,5 s; amostra descartada." : "\(model).")
+            temperatureDetail: timedOut ? "Coleta excedeu 2,5 s; amostra descartada." : "\(model).",
+            ssdTemperatures: timedOut ? [] : ssd, gpuName: gpuName)
     }
 
     private func readAccelerators() -> [(model: String?, statistics: [String: Any])] {
@@ -176,13 +190,17 @@ final class HardwareSensorSystem {
         return result
     }
 
-    private static func cpuBrand() -> String? {
+}
+
+enum HardwareNames {
+    static let cpu: String? = {
         var size = 0
         guard sysctlbyname("machdep.cpu.brand_string", nil, &size, nil, 0) == 0, size > 0, size < 1024 else { return nil }
         var data = [CChar](repeating: 0, count: size)
         guard sysctlbyname("machdep.cpu.brand_string", &data, &size, nil, 0) == 0 else { return nil }
-        return String(cString: data)
-    }
+        let name = String(cString: data).trimmingCharacters(in: .whitespaces)
+        return name.isEmpty ? nil : name
+    }()
 }
 
 /// Private AppleSMC user-client ABI. Contains no write command or fan control operation.
