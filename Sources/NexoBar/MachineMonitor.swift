@@ -95,7 +95,7 @@ final class MachineMonitor {
             .unavailable(.gpuTemperature, "Sensor de temperatura da GPU indisponível por API pública suportada, sem privilégios; nenhum valor é estimado.")]
     }
 
-    private static func cpuTicks() -> CPUTicks? {
+    static func cpuTicks() -> CPUTicks? {
         let host = mach_host_self()
         defer { mach_port_deallocate(mach_task_self_, host) }
         var info = host_cpu_load_info_data_t()
@@ -111,7 +111,7 @@ final class MachineMonitor {
                         idle: UInt64(info.cpu_ticks.2), nice: UInt64(info.cpu_ticks.3))
     }
 
-    private static func physicalMemory() -> PhysicalMemorySample? {
+    static func physicalMemory() -> PhysicalMemorySample? {
         let host = mach_host_self()
         defer { mach_port_deallocate(mach_task_self_, host) }
         var pageSize: vm_size_t = 0

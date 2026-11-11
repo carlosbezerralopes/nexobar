@@ -1,6 +1,8 @@
 #Requires -Version 7
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
+$shortVersion = '0.4.0'
+$bundleVersion = '13'
 Push-Location $projectRoot
 try {
     # Build outside cloud-backed Documents: File Provider FinderInfo breaks codesign.
@@ -28,25 +30,50 @@ try {
     $binaryDirectory = (swift build -c release @swiftArgs --show-bin-path).Trim()
     if ($LASTEXITCODE -ne 0) { throw 'Falha ao localizar binário.' }
     Copy-Item (Join-Path $binaryDirectory 'NexoBar') "$contents/MacOS/NexoBar" -Force
-    @'
+    @"
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>CFBundleExecutable</key><string>NexoBar</string>
 <key>CFBundleIdentifier</key><string>com.carlosbezerralopes.nexobar.preview</string>
 <key>CFBundleName</key><string>NexoBar</string>
-<key>CFBundleVersion</key><string>9</string>
-<key>CFBundleShortVersionString</key><string>0.3.1</string>
+<key>CFBundleVersion</key><string>$bundleVersion</string>
+<key>CFBundleShortVersionString</key><string>$shortVersion</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>LSUIElement</key><true/>
+<key>CFBundleURLTypes</key><array><dict><key>CFBundleURLName</key><string>com.carlosbezerralopes.nexobar.preview</string><key>CFBundleURLSchemes</key><array><string>nexobar</string></array></dict></array>
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
-'@ | Set-Content "$contents/Info.plist" -Encoding utf8NoBOM
+"@ | Set-Content "$contents/Info.plist" -Encoding utf8NoBOM
+    # Widgets de mesa (WidgetKit): extensão sandbox que só lê as pastas dos workers e da fila.
+    $appex = Join-Path $contents 'PlugIns/NexoBarWorkers.appex'
+    Remove-Item -Recurse -Force $appex -ErrorAction SilentlyContinue
+    New-Item -ItemType Directory -Force "$appex/Contents/MacOS" | Out-Null
+    Copy-Item (Join-Path $binaryDirectory 'NexoBarWorkersWidget') "$appex/Contents/MacOS/NexoBarWorkersWidget" -Force
+    @"
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleExecutable</key><string>NexoBarWorkersWidget</string>
+<key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+<key>CFBundleSupportedPlatforms</key><array><string>MacOSX</string></array>
+<key>CFBundleIdentifier</key><string>com.carlosbezerralopes.nexobar.preview.workers</string>
+<key>CFBundleName</key><string>NexoBar Workers</string>
+<key>CFBundleDisplayName</key><string>NexoBar Workers</string>
+<key>CFBundleVersion</key><string>$bundleVersion</string>
+<key>CFBundleShortVersionString</key><string>$shortVersion</string>
+<key>CFBundlePackageType</key><string>XPC!</string>
+<key>LSMinimumSystemVersion</key><string>14.0</string>
+<key>NSExtension</key><dict><key>NSExtensionPointIdentifier</key><string>com.apple.widgetkit-extension</string></dict>
+</dict></plist>
+"@ | Set-Content "$appex/Contents/Info.plist" -Encoding utf8NoBOM
     xattr -cr $appBundle
+    codesign --force --sign - --entitlements 'scripts/macos/WorkersWidget.entitlements' $appex
+    if ($LASTEXITCODE -ne 0) { throw 'Assinatura local do widget falhou.' }
     codesign --force --sign - $appBundle
     if ($LASTEXITCODE -ne 0) { throw 'Assinatura local falhou.' }
-    codesign --verify --strict $appBundle
+    codesign --verify --strict --deep $appBundle
     if ($LASTEXITCODE -ne 0) { throw 'Verificação da assinatura local falhou.' }
     New-Item -ItemType Directory -Force (Join-Path $projectRoot 'dist') | Out-Null
     $archive = Join-Path $projectRoot 'dist/NexoBar-macOS-preview.zip'

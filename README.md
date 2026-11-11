@@ -6,7 +6,7 @@
 
 Indicadores de hardware e limites de uso em uma barra compacta, com interface em português e consultas pelas sessões dos clientes que você já utiliza.
 
-[macOS 0.3.1 · preview](#plataformas) · [Windows 0.6.1 · preview](#plataformas) · [Compilar](docs/BUILDING.md) · [Licença MIT](LICENSE)
+[macOS 0.4.0 · preview](#plataformas) · [Windows 0.6.1 · preview](#plataformas) · [Compilar](docs/BUILDING.md) · [Licença MIT](LICENSE)
 
 </div>
 
@@ -17,6 +17,8 @@ Indicadores de hardware e limites de uso em uma barra compacta, com interface em
 - **CPU, GPU, SSD, RAM e temperaturas**, quando a plataforma e os sensores fornecem a leitura. O SSD mostra tempo ativo e, opcionalmente, leitura/escrita e espaço livre.
 - **Cotas de IA e horários de renovação** informados pelos clientes compatíveis. Uma janela semanal aparece sozinha quando não existe uma janela de sessão.
 - **Detalhes por indicador**, com gráficos de hardware dos últimos cinco minutos mantidos somente em memória.
+- **Workers Ubuntu na mesa do Mac** (macOS): widget com CPU, GPU, SSD, RAM, temperaturas, ventoinha e processos lidos da telemetria publicada pelo coletor `telemetria-workers`. Veja o [widget dos workers](docs/WORKERS-WIDGET.md).
+- **Fila de trabalho na mesa do Mac** (macOS): widget grande ou extragrande com o que roda em cada máquina, as vagas, a espera, as falhas e a contagem de feitos da fila distribuída de GPU do `~/.agents`. Veja a [fila de trabalho](docs/WORKERS-WIDGET.md#fila-de-trabalho).
 - **Uma barra do seu jeito:** ordem, nomes curtos ou do hardware, visibilidade, estilos, memória em GB ou percentual, cotas em uma ou duas linhas e tempo até renovar opcional.
 
 Uma leitura ausente aparece como indisponível. O NexoBar não transforma ausência em zero nem usa consumo de CPU/GPU para inferir a atividade de uma tarefa de IA. Um contador que chegou a zero também não confirma que a cota foi renovada.
@@ -25,7 +27,7 @@ Uma leitura ausente aparece como indisponível. O NexoBar não transforma ausên
 
 | Plataforma | Apresentação | Estado deste preview |
 |---|---|---|
-| macOS 14+ · Apple Silicon | Barra de menus nativa em AppKit/SwiftUI | 0.3.1; bundle arm64, testes automatizados e verificações físicas em Apple M5 Pro. Outros chips precisam de validação. |
+| macOS 14+ · Apple Silicon | Barra de menus nativa em AppKit/SwiftUI e [widget de mesa dos workers](docs/WORKERS-WIDGET.md) | 0.4.0; bundle arm64, testes automatizados e verificações físicas em Apple M5 Pro. Outros chips precisam de validação. |
 | macOS · Intel | Mesma base Swift | Exige compilação própria; execução física ainda não verificada. |
 | Windows 11 · x64 | Faixa translúcida, ícones de bandeja e companion WidBar | 0.6.1; cotas, renovação, temperatura opcional e organização descritas na [matriz 0.6](windows/docs/PARITY-0.6.md). Build, teste nativo e validação visual têm evidências separadas. |
 | Linux | — | Não implementado. |

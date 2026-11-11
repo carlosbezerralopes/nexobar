@@ -69,6 +69,11 @@ enum HardwareSensorDecoding {
     }
 
     static func smcValue(type: String, bytes: [UInt8]) -> Double? {
+        smcNumber(type: type, bytes: bytes).flatMap { validTemperature($0) ? $0 : nil }
+    }
+
+    /// Valor numérico de uma chave SMC, sem o filtro de temperatura (ex.: rotação das ventoinhas em F0Ac).
+    static func smcNumber(type: String, bytes: [UInt8]) -> Double? {
         let value: Double
         switch type {
         case "flt ":
@@ -80,7 +85,7 @@ enum HardwareSensorDecoding {
             value = Double(Int16(bitPattern: UInt16(bytes[0]) << 8 | UInt16(bytes[1]))) / 256
         default: return nil
         }
-        return validTemperature(value) ? value : nil
+        return value.isFinite ? value : nil
     }
 
     static func gpuUsage(_ statistics: [String: Any]) -> Double? {
@@ -221,7 +226,10 @@ final class ReadOnlySMC {
         return true
     }
 
-    func temperature(_ key: String) -> Double? {
+    func temperature(_ key: String) -> Double? { value(key).flatMap { HardwareSensorDecoding.validTemperature($0) ? $0 : nil } }
+
+    /// Leitura de uma chave flt/sp78 sem interpretar como temperatura.
+    func value(_ key: String) -> Double? {
         guard key.utf8.count == 4, connection != 0 else { return nil }
         let code = key.utf8.reduce(UInt32(0)) { $0 << 8 | UInt32($1) }
         var input = SMCMessage()
@@ -240,7 +248,7 @@ final class ReadOnlySMC {
         metadata[code] = info
         let type = String(bytes: [24, 16, 8, 0].map { UInt8(truncatingIfNeeded: info.type >> $0) }, encoding: .ascii) ?? ""
         let bytes = withUnsafeBytes(of: output.bytes) { Array($0.prefix(Int(info.size))) }
-        return HardwareSensorDecoding.smcValue(type: type, bytes: bytes)
+        return HardwareSensorDecoding.smcNumber(type: type, bytes: bytes)
     }
 
     private func call(_ message: SMCMessage) -> SMCMessage? {
