@@ -32,6 +32,7 @@ Segundo widget da mesma extensão (**Fila de trabalho**), só nos tamanhos grand
 - **Contadores:** rodando, na fila (livre e chegando), falhas e feitos. Dos feitos, só a contagem e quantos faltam buscar.
 - **Máquinas, na ordem da fila:** vaga livre de GPU e CPU (barra cheia = livre; não é o uso do hardware) e RAM livre, com o que roda em cada uma e a idade da batida. Batida há 3 min ou mais fica laranja; na idade de órfão (`orfao_min`), vermelha. Sem batimento recente (`vivo_s`), a máquina aparece desligada.
 - **Na fila**, na ordem de entrada, e **falhas**, da mais recente. O grande mostra até 7 linhas de itens e o extragrande até 8 por coluna; o resto vira "+N".
+- **Extragrande vertical** (macOS 27 em diante): cabeçalho, os quatro contadores em 2×2 e uma coluna com as máquinas (até 4 itens rodando por máquina), a fila e as falhas (até 3). A fila ocupa as linhas que sobram, descontada a altura de cada máquina.
 - **Clique:** lê a fila na hora (`nexobar://fila`).
 
 O NexoBar roda `pwsh ~/.agents/scripts/worker/fila.ps1 painel` a cada minuto, só com o widget na mesa, e grava `~/Library/Application Support/NexoBar/widget-fila/fila.json`. A consulta vai com `WORKER_NAO_ACORDAR=1`: não acorda o mestre desligado. Falha mantém o último painel, esmaecido, com o motivo no cabeçalho; painel com mais de 3 min também esmaece. Sem o script, nada roda.
@@ -50,7 +51,7 @@ O executável da extensão precisa entrar por `_NSExtensionMain` (`-e _NSExtensi
 
 O [build.ps1](../scripts/build.ps1) monta a extensão em `Contents/PlugIns` e registra o esquema `nexobar://` no app, usado pelo clique (`nexobar://workers/posicao/<n>`).
 
-Ao mudar o tipo de configuração ou a lista de widgets, suba `CFBundleVersion`: o chronod guarda o descritor por versão. A versão 12 trocou o "Editar widget" (App Intents) pelo clique; widgets adicionados antes precisam ser removidos e adicionados de novo. A 13 juntou o widget da fila. A 14 acrescentou o extragrande vertical à lista de tamanhos.
+Ao mudar o tipo de configuração ou a lista de widgets, suba `CFBundleVersion`: o chronod guarda o descritor por versão. A versão 12 trocou o "Editar widget" (App Intents) pelo clique; widgets adicionados antes precisam ser removidos e adicionados de novo. A 13 juntou o widget da fila. A 14 acrescentou o extragrande vertical ao widget dos workers. A 15 fez o mesmo no widget da fila.
 
 ## Diagnóstico
 

@@ -29,7 +29,14 @@ struct QueueWidget: Widget {
         }
         .configurationDisplayName("Fila de trabalho")
         .description("A fila distribuída de GPU: o que roda em cada máquina, as vagas, o que espera e as falhas. Clique para ler agora.")
-        .supportedFamilies([.systemLarge, .systemExtraLarge])
+        .supportedFamilies(Self.families)
+    }
+
+    /// O extragrande vertical só existe a partir do macOS 27.
+    static var families: [WidgetFamily] {
+        var list: [WidgetFamily] = [.systemLarge, .systemExtraLarge]
+        if #available(macOS 27, *) { list.append(.systemExtraLargePortrait) }
+        return list
     }
 }
 
@@ -46,6 +53,7 @@ struct QueueWidgetView: View {
     var entry: QueueEntry
 
     private var wide: Bool { family == .systemExtraLarge }
+    private var portrait: Bool { if #available(macOS 27, *) { return family == .systemExtraLargePortrait } else { return false } }
 
     var body: some View {
         Group {
@@ -74,7 +82,17 @@ struct QueueWidgetView: View {
         VStack(alignment: .leading, spacing: 8) {
             header(snapshot, panel, stale: stale)
             counters(panel)
-            if wide {
+            if portrait {
+                // Vertical (~713 pt): uma coluna. Cada máquina leva até 4 itens rodando, as falhas até 3 e a espera ocupa o resto das
+                // linhas de itens (a conta desconta a altura de cada cartão de máquina).
+                let lines = Self.portraitItemLines - Self.portraitMachineCost * (panel.maquinas ?? []).count
+                let perMachine = panel.runningLimit(budget: Self.portraitRunningBudget, maximum: 4)
+                let used = panel.runningLines(limit: perMachine)
+                let failed = min(panel.failures.count, 3) + (panel.failures.count > 3 ? 1 : 0)
+                machines(panel)
+                waiting(panel, limit: max(1, lines - used - failed))
+                failures(panel, limit: 3)
+            } else if wide {
                 HStack(alignment: .top, spacing: 12) {
                     machines(panel).frame(maxWidth: .infinity, alignment: .topLeading)
                     VStack(alignment: .leading, spacing: 8) {
@@ -113,22 +131,34 @@ struct QueueWidgetView: View {
         }
     }
 
-    private func counters(_ panel: QueuePanel) -> some View {
+    /// Vertical: linhas de itens que cabem em ~713 pt (menos o custo de cada cartão de máquina) e o teto de linhas para o que roda.
+    static let portraitItemLines = 32
+    static let portraitMachineCost = 2
+    static let portraitRunningBudget = 10
+
+    @ViewBuilder private func counters(_ panel: QueuePanel) -> some View {
         let running = panel.items("andamento").count, waiting = panel.waiting.count, failed = panel.items("falha").count
         let fetch = panel.doneToFetch
-        return HStack(spacing: 6) {
-            counter(running, "rodando", tone: running > 0 ? QueueTone.running : .secondary)
-            counter(waiting, "na fila", tone: waiting > 0 ? QueueTone.waiting : .secondary)
-            counter(failed, failed == 1 ? "falha" : "falhas", tone: failed > 0 ? QueueTone.failed : .secondary)
-            counter(panel.doneCount, panel.doneCount == 1 ? "feito" : "feitos", tone: QueueTone.done,
-                    note: fetch > 0 ? "\(fetch) a buscar" : nil)
+        let cells: [AnyView] = [
+            AnyView(counter(running, "rodando", tone: running > 0 ? QueueTone.running : .secondary)),
+            AnyView(counter(waiting, "na fila", tone: waiting > 0 ? QueueTone.waiting : .secondary)),
+            AnyView(counter(failed, failed == 1 ? "falha" : "falhas", tone: failed > 0 ? QueueTone.failed : .secondary)),
+            AnyView(counter(panel.doneCount, panel.doneCount == 1 ? "feito" : "feitos", tone: QueueTone.done, note: fetch > 0 ? "\(fetch) a buscar" : nil)),
+        ]
+        if portrait {
+            VStack(spacing: 6) {
+                HStack(spacing: 6) { cells[0]; cells[1] }
+                HStack(spacing: 6) { cells[2]; cells[3] }
+            }
+        } else {
+            HStack(spacing: 6) { ForEach(0..<cells.count, id: \.self) { cells[$0] } }
         }
     }
 
     private func counter(_ value: Int, _ label: String, tone: Color, note: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text("\(value)").font(.system(size: wide ? 22 : 18, weight: .semibold).monospacedDigit()).foregroundStyle(value > 0 ? tone : .secondary)
+                Text("\(value)").font(.system(size: wide || portrait ? 22 : 18, weight: .semibold).monospacedDigit()).foregroundStyle(value > 0 ? tone : .secondary)
                 if let note { Text(note).font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.7) }
             }
             Text(label).font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
@@ -143,12 +173,13 @@ struct QueueWidgetView: View {
     private func machines(_ panel: QueuePanel) -> some View {
         let list = panel.maquinas ?? []
         // Grande: até 4 linhas para o que roda; extragrande, até 8.
-        let perMachine = wide ? panel.runningLimit(budget: 8, maximum: 4) : panel.runningLimit(budget: 4, maximum: 2)
+        let perMachine = portrait ? panel.runningLimit(budget: Self.portraitRunningBudget, maximum: 4)
+            : wide ? panel.runningLimit(budget: 8, maximum: 4) : panel.runningLimit(budget: 4, maximum: 2)
         return VStack(alignment: .leading, spacing: 5) {
             Text("MÁQUINAS · VAGAS LIVRES").font(.system(size: 8, weight: .bold)).foregroundStyle(.secondary)
             ForEach(list, id: \.nome) { machine in
                 MachineRow(machine: machine, items: panel.running(on: machine.nome), alive: panel.isAlive(machine, at: entry.date),
-                           orphanAfter: panel.orphanAfter, now: entry.date, limit: perMachine, wide: wide)
+                           orphanAfter: panel.orphanAfter, now: entry.date, limit: perMachine, wide: wide || portrait)
             }
             let elsewhere = panel.runningElsewhere
             if !elsewhere.isEmpty {
