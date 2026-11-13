@@ -2,7 +2,7 @@
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 $shortVersion = '0.4.0'
-$bundleVersion = '13'
+$bundleVersion = '15'
 Push-Location $projectRoot
 try {
     # Build outside cloud-backed Documents: File Provider FinderInfo breaks codesign.
