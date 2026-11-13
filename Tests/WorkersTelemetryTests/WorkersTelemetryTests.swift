@@ -374,4 +374,21 @@ final class QueueTelemetryTests: XCTestCase {
         let mac = try JSONDecoder().decode(WorkerReading.self, from: Data(#"{"host":"MacBook Pro","cpu":{"uso":72},"gpu":{"uso":30}}"#.utf8))
         XCTAssertTrue(WorkerActivity.gpuActive(mac) && WorkerActivity.cpuActive(mac))
     }
+
+    func testHeaderShutdownDropsTheDateWithinTheNext24Hours() {
+        func h(_ f: WorkerReading.Fila, short: Bool = false) -> String? {
+            WorkerFormat.shutdown(id: "worker-x", fila: f, now: Self.now, timeZone: Self.zone, short: short, next24h: true)
+        }
+        // amanhã 03:00 está a 11 h: só HH:mm
+        XCTAssertEqual(h(.init(manter_ate: at(3, 0, dayOffset: 1))), "mantido até 03:00")
+        XCTAssertEqual(h(.init(manter_ate: at(3, 0, dayOffset: 1)), short: true), "até 03:00")
+        XCTAssertEqual(h(.init(desliga_em: at(16, 7))), "desliga às 16:07")
+        XCTAssertEqual(h(.init(desliga_em: at(3, 5, dayOffset: 1)), short: true), "às 03:05")
+        // 16:00 de hoje + 24 h = 16:00 de amanhã: no limite ainda vale; depois, dd/MM
+        XCTAssertEqual(h(.init(manter_ate: at(16, 0, dayOffset: 1)), short: true), "até 16:00")
+        XCTAssertEqual(h(.init(manter_ate: at(16, 1, dayOffset: 1)), short: true), "até 14/11 16:01")
+        XCTAssertEqual(h(.init(desliga_em: at(9, 0, dayOffset: 2)), short: true), "em 15/11 09:00")
+        // sem next24h (rodapé), o dia seguinte mantém dd/MM
+        XCTAssertEqual(off(.init(manter_ate: at(3, 0, dayOffset: 1))), "mantido até 14/11 03:00")
+    }
 }
