@@ -36,6 +36,26 @@ public struct WorkerReading: Codable, Equatable, Sendable {
     public var claude_sessoes: Int?
     /// Segundos desde o boot, no momento da leitura, quando o coletor publicar.
     public var uptime_s: Double?
+    /// Fila de trabalho e desligamento por ociosidade; ausente ou `null` em worker com coletor antigo.
+    public var fila: Fila?
+
+    /// Bloco `fila` da leitura. A decodificação nunca falha: campo com tipo trocado vira nil e o resto da leitura sobrevive.
+    public struct Fila: Codable, Equatable, Sendable {
+        public var item_atual: String?; public var itens_rodando: [String]?; public var ultimo_item: LastItem?
+        public var ocupado: Bool?; public var ultimo_ocupado_ts: Double?; public var ocioso_min: Double?
+        public var manter_ate: Double?; public var desliga_em: Double?
+        public init(item_atual: String? = nil, itens_rodando: [String]? = nil, ultimo_item: LastItem? = nil, ocupado: Bool? = nil,
+                    ultimo_ocupado_ts: Double? = nil, ocioso_min: Double? = nil, manter_ate: Double? = nil, desliga_em: Double? = nil) {
+            self.item_atual = item_atual; self.itens_rodando = itens_rodando; self.ultimo_item = ultimo_item; self.ocupado = ocupado
+            self.ultimo_ocupado_ts = ultimo_ocupado_ts; self.ocioso_min = ocioso_min; self.manter_ate = manter_ate; self.desliga_em = desliga_em
+        }
+    }
+    public struct LastItem: Codable, Equatable, Sendable {
+        public var id: String?; public var estado: String?; public var inicio_ts: Double?; public var fim_ts: Double?; public var fim: String?
+        public init(id: String? = nil, estado: String? = nil, inicio_ts: Double? = nil, fim_ts: Double? = nil, fim: String? = nil) {
+            self.id = id; self.estado = estado; self.inicio_ts = inicio_ts; self.fim_ts = fim_ts; self.fim = fim
+        }
+    }
 
     public var topCPU: Process? { topProcesses.first }
     /// Até três processos com mais CPU, do maior para o menor; só os que arredondam para 1% ou mais.
@@ -43,6 +63,37 @@ public struct WorkerReading: Codable, Equatable, Sendable {
         Array((top_cpu ?? []).filter { ($0.cpu ?? 0).rounded() >= 1 }.sorted { ($0.cpu ?? -1) > ($1.cpu ?? -1) }.prefix(3))
     }
     public var topGPU: GPUProcess? { gpu?.processos?.max { ($0.vram_mb ?? -1) < ($1.vram_mb ?? -1) } }
+}
+
+extension WorkerReading.Fila {
+    private enum CodingKeys: String, CodingKey {
+        case item_atual, itens_rodando, ultimo_item, ocupado, ultimo_ocupado_ts, ocioso_min, manter_ate, desliga_em
+    }
+    public init(from decoder: Decoder) throws {
+        self.init()
+        guard let c = try? decoder.container(keyedBy: CodingKeys.self) else { return }
+        item_atual = (try? c.decodeIfPresent(String.self, forKey: .item_atual)) ?? nil
+        itens_rodando = (try? c.decodeIfPresent([String].self, forKey: .itens_rodando)) ?? nil
+        ultimo_item = (try? c.decodeIfPresent(WorkerReading.LastItem.self, forKey: .ultimo_item)) ?? nil
+        ocupado = (try? c.decodeIfPresent(Bool.self, forKey: .ocupado)) ?? nil
+        ultimo_ocupado_ts = (try? c.decodeIfPresent(Double.self, forKey: .ultimo_ocupado_ts)) ?? nil
+        ocioso_min = (try? c.decodeIfPresent(Double.self, forKey: .ocioso_min)) ?? nil
+        manter_ate = (try? c.decodeIfPresent(Double.self, forKey: .manter_ate)) ?? nil
+        desliga_em = (try? c.decodeIfPresent(Double.self, forKey: .desliga_em)) ?? nil
+    }
+}
+
+extension WorkerReading.LastItem {
+    private enum CodingKeys: String, CodingKey { case id, estado, inicio_ts, fim_ts, fim }
+    public init(from decoder: Decoder) throws {
+        self.init()
+        guard let c = try? decoder.container(keyedBy: CodingKeys.self) else { return }
+        id = (try? c.decodeIfPresent(String.self, forKey: .id)) ?? nil
+        estado = (try? c.decodeIfPresent(String.self, forKey: .estado)) ?? nil
+        inicio_ts = (try? c.decodeIfPresent(Double.self, forKey: .inicio_ts)) ?? nil
+        fim_ts = (try? c.decodeIfPresent(Double.self, forKey: .fim_ts)) ?? nil
+        fim = (try? c.decodeIfPresent(String.self, forKey: .fim)) ?? nil
+    }
 }
 
 public struct WorkerConnection: Codable, Equatable, Sendable {
@@ -278,6 +329,33 @@ public enum WorkerFormat {
         let f = DateFormatter(); f.locale = Locale(identifier: "pt_BR"); f.timeZone = timeZone; f.dateFormat = "HH:mm:ss"
         return f.string(from: date)
     }
+    /// Linha do item da fila: "rodando <id>", "<id> · há 12 min" (terminado) ou "<id> · <estado>". Nada no Mac nem sem item.
+    /// Com item rodando, o último item é o mesmo: nunca aparecem juntos.
+    public static func queueItem(id: String, fila: WorkerReading.Fila?, now: Date) -> String? {
+        guard id != WorkersTelemetry.macID, let fila else { return nil }
+        if let current = fila.item_atual?.trimmingCharacters(in: .whitespaces), !current.isEmpty { return "rodando \(current)" }
+        guard let last = fila.ultimo_item, let item = last.id?.trimmingCharacters(in: .whitespaces), !item.isEmpty else { return nil }
+        if let end = valid(last.fim_ts) { return "\(item) · \(age(from: Date(timeIntervalSince1970: end), to: now))" }
+        if let state = last.estado?.trimmingCharacters(in: .whitespaces), !state.isEmpty { return "\(item) · \(state)" }
+        return item
+    }
+
+    /// Linha do desligamento: "mantido até HH:mm" enquanto `manter_ate` está no futuro; senão "desliga às HH:mm".
+    /// Fora do dia de `now` usa "dd/MM HH:mm" (o `--hoje` mantém até as 03:00 do dia seguinte). Sem `desliga_em`, nada.
+    public static func shutdown(id: String, fila: WorkerReading.Fila?, now: Date, timeZone: TimeZone = .current) -> String? {
+        guard id != WorkersTelemetry.macID, let fila else { return nil }
+        var calendar = Calendar(identifier: .gregorian); calendar.timeZone = timeZone
+        func sameDay(_ ts: Double) -> Bool { calendar.isDate(Date(timeIntervalSince1970: ts), inSameDayAs: now) }
+        func clock(_ ts: Double) -> String {
+            let f = DateFormatter(); f.locale = Locale(identifier: "pt_BR"); f.timeZone = timeZone
+            f.dateFormat = sameDay(ts) ? "HH:mm" : "dd/MM HH:mm"
+            return f.string(from: Date(timeIntervalSince1970: ts))
+        }
+        if let keep = valid(fila.manter_ate), keep > now.timeIntervalSince1970 { return "mantido até \(clock(keep))" }
+        if let off = valid(fila.desliga_em) { return "desliga \(sameDay(off) ? "às" : "em") \(clock(off))" }
+        return nil
+    }
+
     /// Tempo desde a leitura, para o cartão desatualizado.
     public static func age(from date: Date?, to now: Date) -> String {
         guard let date else { return "sem leitura" }

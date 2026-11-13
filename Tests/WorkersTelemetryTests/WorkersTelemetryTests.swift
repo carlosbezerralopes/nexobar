@@ -267,4 +267,88 @@ final class QueueTelemetryTests: XCTestCase {
         var moved = panel; moved.itens?[2].estado = "andamento"; moved.itens?[2].maquina = "mac-carlos"
         XCTAssertNotEqual(QueueSnapshot(painel: moved, lido: 1).signature, a.signature)
     }
+
+    // MARK: bloco fila
+
+    private func reading(fila: String?, extra: String = "") throws -> WorkerReading {
+        let f = fila.map { #","fila":\#($0)"# } ?? ""
+        return try JSONDecoder().decode(WorkerReading.self, from: Data(#"{"v":1,"host":"worker-x","cpu":{"uso":7,"temp":40}\#(f)\#(extra)}"#.utf8))
+    }
+
+    func testReadingWithoutOrWithNullQueueBlockKeepsEverythingElse() throws {
+        XCTAssertNil(try reading(fila: nil).fila)
+        let r = try reading(fila: "null")
+        XCTAssertNil(r.fila)
+        XCTAssertEqual(r.cpu?.uso, 7)
+    }
+
+    func testFullQueueBlockDecodes() throws {
+        let r = try reading(fila: #"{"item_atual":"abc123","itens_rodando":["abc123"],"ultimo_item":{"id":"abc123","estado":"rodando","inicio_ts":1794596000,"fim_ts":null,"fim":null},"ocupado":true,"ultimo_ocupado_ts":1794596568,"ocioso_min":30,"manter_ate":null,"desliga_em":1794598368}"#)
+        let f = try XCTUnwrap(r.fila)
+        XCTAssertEqual(f.item_atual, "abc123")
+        XCTAssertEqual(f.itens_rodando, ["abc123"])
+        XCTAssertEqual(f.ultimo_item?.estado, "rodando")
+        XCTAssertEqual(f.ultimo_item?.inicio_ts, 1794596000)
+        XCTAssertNil(f.ultimo_item?.fim_ts)
+        XCTAssertEqual(f.ocupado, true)
+        XCTAssertEqual(f.ocioso_min, 30)
+        XCTAssertNil(f.manter_ate)
+        XCTAssertEqual(f.desliga_em, 1794598368)
+    }
+
+    func testWrongTypesInsideQueueBlockNeverDropTheReading() throws {
+        let r = try reading(fila: #"{"item_atual":"a","desliga_em":"x","ocupado":"sim","itens_rodando":"a","ultimo_item":{"id":7,"estado":"ok","fim_ts":"y","inicio_ts":5}}"#)
+        XCTAssertEqual(r.cpu?.uso, 7, "o resto da leitura sobrevive")
+        let f = try XCTUnwrap(r.fila)
+        XCTAssertEqual(f.item_atual, "a")
+        XCTAssertNil(f.desliga_em)
+        XCTAssertNil(f.ocupado)
+        XCTAssertNil(f.itens_rodando)
+        XCTAssertNil(f.ultimo_item?.id)
+        XCTAssertEqual(f.ultimo_item?.estado, "ok")
+        XCTAssertNil(f.ultimo_item?.fim_ts)
+        XCTAssertEqual(f.ultimo_item?.inicio_ts, 5)
+        // contêiner que não é objeto
+        for bad in [#""x""#, "5", "[1]", #"{"ultimo_item":"x"}"#] {
+            let r = try reading(fila: bad)
+            XCTAssertEqual(r.cpu?.uso, 7, bad)
+            XCTAssertEqual(r.fila?.item_atual, nil, bad)
+            XCTAssertNil(r.fila?.ultimo_item?.id, bad)
+        }
+    }
+
+    private static let zone = TimeZone(identifier: "America/Sao_Paulo")!
+    /// 2026-11-13 16:00:00 -03:00
+    private static let now = Date(timeIntervalSince1970: 1794596400)
+    private func at(_ hour: Int, _ minute: Int, dayOffset: Int = 0) -> Double {
+        var c = Calendar(identifier: .gregorian); c.timeZone = Self.zone
+        return c.date(from: DateComponents(year: 2026, month: 11, day: 13 + dayOffset, hour: hour, minute: minute))!.timeIntervalSince1970
+    }
+    private func item(_ f: WorkerReading.Fila?, id: String = "worker-x") -> String? { WorkerFormat.queueItem(id: id, fila: f, now: Self.now) }
+    private func off(_ f: WorkerReading.Fila?, id: String = "worker-x") -> String? { WorkerFormat.shutdown(id: id, fila: f, now: Self.now, timeZone: Self.zone) }
+
+    func testQueueItemLine() {
+        let end = Self.now.timeIntervalSince1970 - 12 * 60
+        XCTAssertEqual(item(.init(item_atual: "abc", ultimo_item: .init(id: "abc", estado: "rodando", inicio_ts: 1))), "rodando abc",
+                       "com item rodando, o último é o mesmo e não aparece")
+        XCTAssertEqual(item(.init(ultimo_item: .init(id: "abc", estado: "entregue", fim_ts: end))), "abc · há 12 min")
+        XCTAssertEqual(item(.init(ultimo_item: .init(id: "abc", estado: "erro", fim_ts: nil))), "abc · erro")
+        XCTAssertEqual(item(.init(ultimo_item: .init(id: "abc"))), "abc")
+        XCTAssertNil(item(.init(ultimo_item: .init(estado: "erro"))))
+        XCTAssertNil(item(.init()))
+        XCTAssertNil(item(nil))
+        XCTAssertNil(item(.init(item_atual: "abc"), id: WorkersTelemetry.macID), "o Mac não tem bloco")
+    }
+
+    func testShutdownLine() {
+        let now = Self.now.timeIntervalSince1970
+        XCTAssertEqual(off(.init(manter_ate: at(18, 7), desliga_em: at(16, 30))), "mantido até 18:07")
+        XCTAssertEqual(off(.init(manter_ate: now - 60, desliga_em: at(16, 7))), "desliga às 16:07", "manter vencido cai no desliga")
+        XCTAssertEqual(off(.init(desliga_em: at(16, 7))), "desliga às 16:07")
+        XCTAssertNil(off(.init(ocioso_min: nil)), "sem ocioso_min, nada")
+        XCTAssertNil(off(nil))
+        XCTAssertNil(off(.init(desliga_em: at(16, 7)), id: WorkersTelemetry.macID))
+        XCTAssertEqual(off(.init(manter_ate: at(3, 0, dayOffset: 1))), "mantido até 14/11 03:00")
+        XCTAssertEqual(off(.init(desliga_em: at(3, 5, dayOffset: 1))), "desliga em 14/11 03:05")
+    }
 }

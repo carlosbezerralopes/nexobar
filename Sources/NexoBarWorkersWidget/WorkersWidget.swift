@@ -75,7 +75,7 @@ struct WorkersWidgetView: View {
                     ForEach(Array(stride(from: 0, to: workers.count, by: columns)), id: \.self) { start in
                         GridRow {
                             ForEach(workers[start..<min(start + columns, workers.count)]) { worker in
-                                let card = WorkerCard(worker: worker, now: entry.date, compact: family == .systemMedium)
+                                let card = WorkerCard(worker: worker, now: entry.date, compact: family == .systemMedium, tall: family == .systemExtraLarge)
                                 if let position = worker.position { Link(destination: WorkersLink.url(position: position)) { card } } else { card }
                             }
                         }
@@ -92,6 +92,8 @@ struct WorkerCard: View {
     var worker: WorkerSnapshot
     var now: Date
     var compact: Bool
+    /// Cartão de altura inteira (extragrande): sobra espaço para o bloco da fila sem tirar processos.
+    var tall = false
 
     private var stale: Bool { worker.isStale(at: now) }
     private var reading: WorkerReading? { worker.reading }
@@ -136,10 +138,16 @@ struct WorkerCard: View {
         .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(.background.opacity(0.35)))
     }
 
-    /// Processos, hora da leitura e, à direita da hora, as sessões do Claude (Mac) ou o tempo ligado (workers). No médio, só o maior processo, para caber em altura.
+    /// Processos, fila, hora da leitura e, à direita da hora, as sessões do Claude (Mac) ou o tempo ligado (workers). No médio, só o
+    /// maior processo, que cede o lugar à linha do desligamento. A fila (item e desligamento) só vem de worker; com ela, o grande
+    /// perde processos (processos + fila ≤ 3 linhas, o que o rodapé já tinha; o extragrande, de altura inteira, mantém 3), para não cortar a linha da hora.
     @ViewBuilder private var footer: some View {
-        let processes = reading?.topProcesses ?? []
         let gpu = reading?.topGPU
+        let item = compact ? nil : WorkerFormat.queueItem(id: worker.id, fila: reading?.fila, now: now)
+        let off = WorkerFormat.shutdown(id: worker.id, fila: reading?.fila, now: now)
+        let queueLines = (item == nil ? 0 : 1) + (off == nil ? 0 : 1)
+        let budget = tall ? 3 : 3 - queueLines
+        let processes = Array((reading?.topProcesses ?? []).prefix(max(0, min(3, budget))))
         let timeLine = HStack(spacing: 4) {
             Text(WorkerFormat.time(worker.sampledAt)).monospacedDigit()
             Spacer(minLength: 2)
@@ -152,12 +160,15 @@ struct WorkerCard: View {
         .font(.system(size: 9)).foregroundStyle(.secondary)
         VStack(alignment: .leading, spacing: 0) {
             if compact {
-                if let top = processes.first { process("cpu", top.nome ?? WorkerFormat.missing, WorkerFormat.percent(top.cpu)) }
+                if let off { process("power", off, nil) }
+                else if let top = (reading?.topProcesses ?? []).first { process("cpu", top.nome ?? WorkerFormat.missing, WorkerFormat.percent(top.cpu)) }
             } else {
                 ForEach(Array(processes.enumerated()), id: \.offset) { _, p in
                     process("cpu", p.nome ?? WorkerFormat.missing, WorkerFormat.percent(p.cpu))
                 }
                 if let gpu { process("cube", gpu.nome ?? WorkerFormat.missing, WorkerFormat.megabytesAsGB(gpu.vram_mb)) }
+                if let item { process("tray", item, nil) }
+                if let off { process("power", off, nil) }
             }
             timeLine.padding(.top, compact ? 0 : 2)
         }
@@ -213,11 +224,11 @@ struct WorkerCard: View {
         }
     }
 
-    private func process(_ symbol: String, _ name: String, _ value: String) -> some View {
+    private func process(_ symbol: String, _ name: String, _ value: String?) -> some View {
         HStack(spacing: 3) {
             Image(systemName: symbol).font(.system(size: 8))
             Text(name).lineLimit(1).truncationMode(.middle)
-            Text(value).monospacedDigit()
+            if let value { Text(value).monospacedDigit().fixedSize() }
         }
         .font(.system(size: 9)).foregroundStyle(.secondary)
     }
