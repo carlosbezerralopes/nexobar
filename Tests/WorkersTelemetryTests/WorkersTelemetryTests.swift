@@ -351,4 +351,27 @@ final class QueueTelemetryTests: XCTestCase {
         XCTAssertEqual(off(.init(manter_ate: at(3, 0, dayOffset: 1))), "mantido até 14/11 03:00")
         XCTAssertEqual(off(.init(desliga_em: at(3, 5, dayOffset: 1))), "desliga em 14/11 03:05")
     }
+
+    func testActivityThresholdsAreIndependentAndMissingDataIsNotActivity() throws {
+        func r(gpu: Double?, cpu: Double?) throws -> WorkerReading {
+            let g = gpu.map { #","gpu":{"uso":\#($0)}"# } ?? ""
+            let c = cpu.map { #""uso":\#($0)"# } ?? ""
+            return try JSONDecoder().decode(WorkerReading.self, from: Data(#"{"cpu":{\#(c)}\#(g)}"#.utf8))
+        }
+        XCTAssertEqual(WorkerActivity.gpuThreshold, 10); XCTAssertEqual(WorkerActivity.cpuThreshold, 50)
+        XCTAssertFalse(WorkerActivity.gpuActive(try r(gpu: 10, cpu: nil)), "GPU: estritamente acima de 10")
+        XCTAssertTrue(WorkerActivity.gpuActive(try r(gpu: 10.5, cpu: nil)))
+        XCTAssertFalse(WorkerActivity.cpuActive(try r(gpu: nil, cpu: 49.9)))
+        XCTAssertTrue(WorkerActivity.cpuActive(try r(gpu: nil, cpu: 50)), "CPU: a partir de 50")
+        let both = try r(gpu: 80, cpu: 90)
+        XCTAssertTrue(WorkerActivity.gpuActive(both) && WorkerActivity.cpuActive(both))
+        let gpuOnly = try r(gpu: 80, cpu: 5)
+        XCTAssertTrue(WorkerActivity.gpuActive(gpuOnly)); XCTAssertFalse(WorkerActivity.cpuActive(gpuOnly))
+        let none = try r(gpu: nil, cpu: nil)
+        XCTAssertFalse(WorkerActivity.gpuActive(none) || WorkerActivity.cpuActive(none), "ausente não é atividade")
+        XCTAssertFalse(WorkerActivity.gpuActive(nil) || WorkerActivity.cpuActive(nil))
+        // o Mac usa a mesma estrutura
+        let mac = try JSONDecoder().decode(WorkerReading.self, from: Data(#"{"host":"MacBook Pro","cpu":{"uso":72},"gpu":{"uso":30}}"#.utf8))
+        XCTAssertTrue(WorkerActivity.gpuActive(mac) && WorkerActivity.cpuActive(mac))
+    }
 }

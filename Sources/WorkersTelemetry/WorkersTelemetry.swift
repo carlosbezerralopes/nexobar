@@ -283,6 +283,16 @@ public enum WorkersLayout {
     }
 }
 
+/// Atividade do worker pela leitura, independente por recurso. Dado ausente não é atividade.
+public enum WorkerActivity {
+    /// GPU acima de 10%: o mesmo limiar do desligar-ocioso do `~/.agents`.
+    public static let gpuThreshold = 10.0
+    /// CPU a partir de 50%: render ou outro trabalho pesado.
+    public static let cpuThreshold = 50.0
+    public static func gpuActive(_ reading: WorkerReading?) -> Bool { (reading?.gpu?.uso).map { $0.isFinite && $0 > gpuThreshold } ?? false }
+    public static func cpuActive(_ reading: WorkerReading?) -> Bool { (reading?.cpu?.uso).map { $0.isFinite && $0 >= cpuThreshold } ?? false }
+}
+
 /// Textos em pt-BR; leitura ausente vira "—".
 public enum WorkerFormat {
     public static let missing = "—"

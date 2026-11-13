@@ -18,7 +18,9 @@ Widget WidgetKit (**NexoBar Workers**) que mostra, na mesa do Mac, o próprio Ma
 - **Fila no rodapé:** nos workers com bloco `fila`, o rodapé ganha a linha do item ("rodando <id>", "<id> · há N min" ou "<id> · <estado>") e a do desligamento ("desliga às HH:MM" ou "mantido até HH:MM"; "dd/MM HH:MM" fora do dia de hoje; nada sem `desliga_em`). No grande, processos e linhas da fila somam no máximo 3. No médio, o desligamento ocupa o lugar do maior processo. O extragrande mantém 3 processos. O Mac não tem esse bloco.
 - A hora da leitura fica sempre visível, na última linha do cartão, para o apelido ocupar a largura do cabeçalho. Leitura recebida há mais de 60 s, worker desconectado ou conectando aparece esmaecido como desatualizado. A timeline já traz a entrada em que cada cartão expira, sem depender de recarga.
 - Ausência não é zero: campo sem leitura aparece como "—"; worker sem NVIDIA mostra "sem GPU".
-- Tamanhos: médio (2 cartões, sem load/watts/swap), grande (até 4) e extragrande (até 4 lado a lado).
+- Tamanhos: médio (2 cartões, sem load/watts/swap), grande (até 4), extragrande (até 4 lado a lado) e, a partir do macOS 27, extragrande vertical (2×2, cartões altos com o conteúdo completo).
+- **Atividade:** no cabeçalho, à direita do nome, um ícone roxo (`cube.fill`) com a GPU acima de 10% e um azul (`cpu.fill`) com a CPU a partir de 50%. Valem juntos e também no Mac. O cartão ganha uma borda fina na cor ativa (gradiente roxo e azul com os dois). Dado ausente não é atividade, e o cartão desatualizado não mostra nada. Os limiares ficam em `WorkerActivity`.
+- **Grande com trabalho:** com item da fila ou GPU/CPU ativa, o grande mostra só o maior processo de CPU, além do processo da GPU. Sem trabalho, mostra até 3, dentro do teto de 3 linhas com a fila. O extragrande e o vertical mantêm 3.
 - **Clique num cartão**: o NexoBar abre a janela daquela posição para escolher o PC (ou Automático) e o apelido. O apelido pertence ao PC e o acompanha se ele mudar de posição; escolher um PC que já está em outra posição troca as duas. No automático, o Mac vem primeiro e os workers depois, em ordem alfabética. As escolhas ficam em `~/Library/Application Support/NexoBar/widget-workers/posicoes.json`.
 - **Acordar**: se o worker do cartão clicado estiver desconectado, a janela oferece acordá-lo; o botão fecha a janela e o NexoBar roda `~/.agents/scripts/worker/acordar.sh <worker>` (Wake-on-LAN pela LAN de casa e espera do SSH, até 4 min); enquanto o script roda, o cartão fica "acordando" em laranja (marca em `NexoBar/widget-workers/acordando.json`, que vence em 5 min); sem o script, a opção não aparece. Worker sem WoL recebe do script a explicação de como liga.
 - O app NexoBar verifica a pasta a cada 5 s e pede ao WidgetKit a recarga quando um arquivo muda.
@@ -48,7 +50,7 @@ O executável da extensão precisa entrar por `_NSExtensionMain` (`-e _NSExtensi
 
 O [build.ps1](../scripts/build.ps1) monta a extensão em `Contents/PlugIns` e registra o esquema `nexobar://` no app, usado pelo clique (`nexobar://workers/posicao/<n>`).
 
-Ao mudar o tipo de configuração ou a lista de widgets, suba `CFBundleVersion`: o chronod guarda o descritor por versão. A versão 12 trocou o "Editar widget" (App Intents) pelo clique; widgets adicionados antes precisam ser removidos e adicionados de novo. A 13 juntou o widget da fila.
+Ao mudar o tipo de configuração ou a lista de widgets, suba `CFBundleVersion`: o chronod guarda o descritor por versão. A versão 12 trocou o "Editar widget" (App Intents) pelo clique; widgets adicionados antes precisam ser removidos e adicionados de novo. A 13 juntou o widget da fila. A 14 acrescentou o extragrande vertical à lista de tamanhos.
 
 ## Diagnóstico
 
