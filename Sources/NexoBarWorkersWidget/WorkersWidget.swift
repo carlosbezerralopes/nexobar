@@ -126,12 +126,17 @@ struct WorkerCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 4) {
-                Circle().fill(stateColor).frame(width: 6, height: 6)
-                Text(worker.displayName).font(.system(size: 11, weight: .semibold)).lineLimit(1).truncationMode(.middle)
-                Spacer(minLength: 2)
-                if gpuActive { Image(systemName: "cube.fill").font(.system(size: 9)).foregroundStyle(Self.gpuColor) }
-                if cpuActive { Image(systemName: "cpu.fill").font(.system(size: 9)).foregroundStyle(Self.cpuColor) }
+            // Extragrande: o desligamento sobe para o cabeçalho. Não trunca; se não couber com o apelido inteiro, tenta a forma curta
+            // ("até 14/11 03:00", "às 16:51"), depois só o horário ("14/11 03:00"; o ícone power já diz o que é) e, por último,
+            // o apelido trunca no meio.
+            let headerOff = tall ? WorkerFormat.shutdown(id: worker.id, fila: reading?.fila, now: now) : nil
+            let headerShort = tall ? WorkerFormat.shutdown(id: worker.id, fila: reading?.fila, now: now, short: true) : nil
+            let headerBare = headerShort.map { $0.split(separator: " ", maxSplits: 1).dropFirst().joined() }
+            ViewThatFits(in: .horizontal) {
+                header(off: headerOff, fixedName: true)
+                header(off: headerShort, fixedName: true)
+                header(off: headerBare, fixedName: true)
+                header(off: headerBare, fixedName: false)
             }
             if let statusText {
                 Text(statusText).font(.system(size: 9, weight: .medium)).foregroundStyle(stateColor).lineLimit(1)
@@ -164,13 +169,36 @@ struct WorkerCard: View {
         }
     }
 
+    private func header(off: String?, fixedName: Bool) -> some View {
+        HStack(spacing: 4) {
+            Circle().fill(stateColor).frame(width: 6, height: 6)
+            Group {
+                if fixedName { nameText.fixedSize() } else { nameText }
+            }
+            Spacer(minLength: 2)
+            if let off {
+                HStack(spacing: 2) {
+                    Image(systemName: "power").font(.system(size: 8))
+                    Text(off).lineLimit(1).fixedSize()
+                }
+                .font(.system(size: 9)).foregroundStyle(.secondary)
+            }
+            if gpuActive { Image(systemName: "cube.fill").font(.system(size: 9)).foregroundStyle(Self.gpuColor) }
+            if cpuActive { Image(systemName: "cpu.fill").font(.system(size: 9)).foregroundStyle(Self.cpuColor) }
+        }
+    }
+    private var nameText: some View {
+        Text(worker.displayName).font(.system(size: 11, weight: .semibold)).lineLimit(1).truncationMode(.middle)
+    }
+
     /// Processos, fila, hora da leitura e, à direita da hora, as sessões do Claude (Mac) ou o tempo ligado (workers). No médio, só o
     /// maior processo, que cede o lugar à linha do desligamento. A fila (item e desligamento) só vem de worker; com ela, o grande
     /// perde processos (processos + fila ≤ 3 linhas, o que o rodapé já tinha; o extragrande, de altura inteira, mantém 3), para não cortar a linha da hora.
     @ViewBuilder private var footer: some View {
         let gpu = reading?.topGPU
         let item = compact ? nil : WorkerFormat.queueItem(id: worker.id, fila: reading?.fila, now: now)
-        let off = WorkerFormat.shutdown(id: worker.id, fila: reading?.fila, now: now)
+        // No extragrande o desligamento fica no cabeçalho.
+        let off = tall ? nil : WorkerFormat.shutdown(id: worker.id, fila: reading?.fila, now: now)
         let queueLines = (item == nil ? 0 : 1) + (off == nil ? 0 : 1)
         // Com algo rodando (item da fila, GPU ou CPU ativa), o grande mostra só o maior processo.
         let running = WorkerFormat.queueItem(id: worker.id, fila: reading?.fila, now: now) != nil || gpuActive || cpuActive

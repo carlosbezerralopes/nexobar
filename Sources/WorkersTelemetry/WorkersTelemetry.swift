@@ -351,8 +351,8 @@ public enum WorkerFormat {
     }
 
     /// Linha do desligamento: "mantido até HH:mm" enquanto `manter_ate` está no futuro; senão "desliga às HH:mm".
-    /// Fora do dia de `now` usa "dd/MM HH:mm" (o `--hoje` mantém até as 03:00 do dia seguinte). Sem `desliga_em`, nada.
-    public static func shutdown(id: String, fila: WorkerReading.Fila?, now: Date, timeZone: TimeZone = .current) -> String? {
+    /// Com `short`, só "até HH:mm" ou "às HH:mm" (para o cabeçalho). Fora do dia de `now` usa "dd/MM HH:mm" (o `--hoje` mantém até as 03:00 do dia seguinte). Sem `desliga_em`, nada.
+    public static func shutdown(id: String, fila: WorkerReading.Fila?, now: Date, timeZone: TimeZone = .current, short: Bool = false) -> String? {
         guard id != WorkersTelemetry.macID, let fila else { return nil }
         var calendar = Calendar(identifier: .gregorian); calendar.timeZone = timeZone
         func sameDay(_ ts: Double) -> Bool { calendar.isDate(Date(timeIntervalSince1970: ts), inSameDayAs: now) }
@@ -361,8 +361,8 @@ public enum WorkerFormat {
             f.dateFormat = sameDay(ts) ? "HH:mm" : "dd/MM HH:mm"
             return f.string(from: Date(timeIntervalSince1970: ts))
         }
-        if let keep = valid(fila.manter_ate), keep > now.timeIntervalSince1970 { return "mantido até \(clock(keep))" }
-        if let off = valid(fila.desliga_em) { return "desliga \(sameDay(off) ? "às" : "em") \(clock(off))" }
+        if let keep = valid(fila.manter_ate), keep > now.timeIntervalSince1970 { return "\(short ? "" : "mantido ")até \(clock(keep))" }
+        if let off = valid(fila.desliga_em) { return "\(short ? "" : "desliga ")\(sameDay(off) ? "às" : "em") \(clock(off))" }
         return nil
     }
 
