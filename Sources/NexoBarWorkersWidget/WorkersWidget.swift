@@ -126,11 +126,11 @@ struct WorkerCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            // Extragrande: o desligamento sobe para o cabeçalho. Não trunca; se não couber com o apelido inteiro, tenta a forma curta
-            // ("até 14/11 03:00", "às 16:51"), depois só o horário ("14/11 03:00"; o ícone power já diz o que é) e, por último,
-            // o apelido trunca no meio.
-            let headerOff = tall ? WorkerFormat.shutdown(id: worker.id, fila: reading?.fila, now: now) : nil
-            let headerShort = tall ? WorkerFormat.shutdown(id: worker.id, fila: reading?.fila, now: now, short: true) : nil
+            // Extragrande: o desligamento sobe para o cabeçalho e não trunca. Se não couber com o apelido inteiro, tenta a forma curta
+            // ("até 03:00", "às 16:51"), depois só o horário ("03:00"; o ícone power já diz o que é) e, por último, o apelido trunca
+            // no meio. Nas próximas 24 h o horário não leva dd/MM.
+            let headerOff = tall ? WorkerFormat.shutdown(id: worker.id, fila: reading?.fila, now: now, next24h: true) : nil
+            let headerShort = tall ? WorkerFormat.shutdown(id: worker.id, fila: reading?.fila, now: now, short: true, next24h: true) : nil
             let headerBare = headerShort.map { $0.split(separator: " ", maxSplits: 1).dropFirst().joined() }
             ViewThatFits(in: .horizontal) {
                 header(off: headerOff, fixedName: true)
@@ -170,14 +170,14 @@ struct WorkerCard: View {
     }
 
     private func header(off: String?, fixedName: Bool) -> some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 3) {
             Circle().fill(stateColor).frame(width: 6, height: 6)
             Group {
                 if fixedName { nameText.fixedSize() } else { nameText }
             }
             Spacer(minLength: 2)
             if let off {
-                HStack(spacing: 2) {
+                HStack(spacing: 1) {
                     Image(systemName: "power").font(.system(size: 8))
                     Text(off).lineLimit(1).fixedSize()
                 }

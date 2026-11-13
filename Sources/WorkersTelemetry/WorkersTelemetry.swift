@@ -351,11 +351,13 @@ public enum WorkerFormat {
     }
 
     /// Linha do desligamento: "mantido até HH:mm" enquanto `manter_ate` está no futuro; senão "desliga às HH:mm".
-    /// Com `short`, só "até HH:mm" ou "às HH:mm" (para o cabeçalho). Fora do dia de `now` usa "dd/MM HH:mm" (o `--hoje` mantém até as 03:00 do dia seguinte). Sem `desliga_em`, nada.
-    public static func shutdown(id: String, fila: WorkerReading.Fila?, now: Date, timeZone: TimeZone = .current, short: Bool = false) -> String? {
+    /// Com `short`, só "até HH:mm" ou "às HH:mm" (para o cabeçalho). Fora do dia de `now` usa "dd/MM HH:mm" (o `--hoje` mantém até as 03:00 do dia seguinte). Com `next24h` (cabeçalho), um instante nas próximas 24 h mostra só HH:mm, sem dd/MM. Sem `desliga_em`, nada.
+    public static func shutdown(id: String, fila: WorkerReading.Fila?, now: Date, timeZone: TimeZone = .current, short: Bool = false, next24h: Bool = false) -> String? {
         guard id != WorkersTelemetry.macID, let fila else { return nil }
         var calendar = Calendar(identifier: .gregorian); calendar.timeZone = timeZone
-        func sameDay(_ ts: Double) -> Bool { calendar.isDate(Date(timeIntervalSince1970: ts), inSameDayAs: now) }
+        func sameDay(_ ts: Double) -> Bool {
+            calendar.isDate(Date(timeIntervalSince1970: ts), inSameDayAs: now) || (next24h && ts >= now.timeIntervalSince1970 && ts - now.timeIntervalSince1970 <= 86400)
+        }
         func clock(_ ts: Double) -> String {
             let f = DateFormatter(); f.locale = Locale(identifier: "pt_BR"); f.timeZone = timeZone
             f.dateFormat = sameDay(ts) ? "HH:mm" : "dd/MM HH:mm"
