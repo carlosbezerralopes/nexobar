@@ -67,7 +67,7 @@ struct WorkersWidgetView: View {
 
     private var portrait: Bool { if #available(macOS 27, *) { return family == .systemExtraLargePortrait } else { return false } }
     private var capacity: Int { family == .systemMedium ? 2 : 4 }
-    private var columns: Int { family == .systemExtraLarge ? 4 : 2 }
+    private var columns: Int { family == .systemExtraLarge ? 4 : portrait ? 1 : 2 }
 
     var body: some View {
         let workers = Array(entry.workers.prefix(capacity))
@@ -83,7 +83,7 @@ struct WorkersWidgetView: View {
                     ForEach(Array(stride(from: 0, to: workers.count, by: columns)), id: \.self) { start in
                         GridRow {
                             ForEach(workers[start..<min(start + columns, workers.count)]) { worker in
-                                let card = WorkerCard(worker: worker, now: entry.date, compact: family == .systemMedium, tall: family == .systemExtraLarge || portrait)
+                                let card = WorkerCard(worker: worker, now: entry.date, compact: family == .systemMedium, tall: family == .systemExtraLarge)
                                 if let position = worker.position { Link(destination: WorkersLink.url(position: position)) { card } } else { card }
                             }
                         }
