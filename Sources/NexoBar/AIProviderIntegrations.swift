@@ -6,8 +6,7 @@ enum AIProviderIntegrations {
     static func read(_ id: IndicatorID, now: Date, cliDirectories: CLIWorkingDirectories = .load()) throws -> IndicatorReading {
         try read(id, now: now, locate: UsageCommand.locate,
                  run: { command, binary in
-                     try UsageCommand.run(binary: binary, arguments: command.arguments, input: command.input,
-                                          rpc: command.rpc, timeout: command.timeout,
+                     try UsageCommand.run(command, binary: binary,
                                           workingDirectory: id == .codex ? try cliDirectories.directory(for: .codex) : nil)
                  }, claudeQuery: { date in
                      guard let directory = try cliDirectories.directory(for: .claude) else { throw CLIWorkingDirectoryError.required }
@@ -29,10 +28,20 @@ enum AIProviderIntegrations {
         guard let command = AISessionPolicy.command(for: id), let binary = locate(command.binary) else {
             throw AIReadError.unavailable
         }
-        let text = try run(command, binary)
+        do {
+            return try parse(id, command: command, text: try run(command, binary), now: now)
+        } catch let error as AIReadError where error == .unavailable || error == .malformed {
+            // Authentication, rate limits, timeouts and excessive output never trigger another query.
+            guard let fallback = AISessionPolicy.fallbackCommand(for: id) else { throw error }
+            guard let fallbackBinary = locate(fallback.binary) else { throw error }
+            return try parse(id, command: fallback, text: try run(fallback, fallbackBinary), now: now)
+        }
+    }
+
+    private static func parse(_ id: IndicatorID, command: AISessionPolicy.Command, text: String, now: Date) throws -> IndicatorReading {
         switch id {
         case .codex: return try AIUsageParser.codex(text, now: now)
-        case .kiro: return try AIUsageParser.kiro(text, now: now)
+        case .kiro: return command.rpc ? try AIUsageParser.kiroACP(text, now: now) : try AIUsageParser.kiro(text, now: now)
         case .antigravity: return try antigravityCLI(text, now: now)
         case .copilot:
             let data = Data(text.utf8)

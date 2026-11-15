@@ -240,6 +240,59 @@ enum AIUsageParser {
         }
         return try reading(.kiro, windows: windows, headline: used, now: now, source: "Kiro CLI /usage · créditos utilizados")
     }
+    /// Parses the `_kiro/account/getUsage` response (id 2) from `kiro-cli acp --agent-engine v3`.
+    static func kiroACP(_ text: String, now: Date) throws -> IndicatorReading {
+        for line in text.split(separator: "\n") {
+            guard let obj = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+                  obj["method"] == nil, (obj["id"] as? Int) == 2 else { continue }
+            func classify(_ message: String) -> AIReadError? {
+                let lower = message.lowercased(with: Locale(identifier: "en_US_POSIX"))
+                if ["rate limit", "throttl", "too many"].contains(where: lower.contains) { return .rateLimited }
+                if ["not logged", "login", "auth"].contains(where: lower.contains) { return .authentication }
+                return nil
+            }
+            if let error = obj["error"] as? [String: Any] {
+                // An older CLI without the method (-32601) stays malformed, so the v2 fallback runs.
+                throw classify(error["message"] as? String ?? "") ?? .malformed
+            }
+            guard let result = obj["result"] as? [String: Any] else { throw AIReadError.malformed }
+            guard (result["success"] as? Bool) == true else {
+                throw classify(result["message"] as? String ?? "") ?? .unavailable
+            }
+            // "Your plan is managed by admin" answers success without data: no quota, never zero.
+            guard let data = result["data"] as? [String: Any] else { throw AIReadError.unavailable }
+            let breakdowns = data["usageBreakdowns"] as? [[String: Any]] ?? []
+            guard let credit = breakdowns.first(where: { ($0["resourceType"] as? String) == "CREDIT" }) ?? (breakdowns.count == 1 ? breakdowns[0] : nil),
+                  let used = number(credit["used"]) else { throw AIReadError.malformed }
+            // The CLI truncates `percentage`; recompute it, and only for a real limit.
+            let limit = (credit["hasLimit"] as? Bool) == true ? number(credit["limit"]).flatMap { $0 > 0 ? $0 : nil } : nil
+            let percent = limit.map { used / $0 * 100 }
+            var reset: Date?
+            if let stamp = data["billingCycleReset"] as? String, stamp.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil {
+                var calendar = Calendar(identifier: .gregorian)
+                calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+                let parts = stamp.split(separator: "-").compactMap { Int($0) }
+                reset = civilDate(year: parts[0], month: parts[1], day: parts[2], calendar: calendar)
+            }
+            let plan = (data["planName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let planLabel = plan.flatMap { $0.isEmpty || $0 == "Unknown" ? nil : String($0.prefix(40)) }
+            var windows = [QuotaWindow(name: "Créditos", usedPercent: percent, resetsAt: reset,
+                                       detail: limit.map { "\(used) de \($0) créditos utilizados" } ?? "\(used) créditos utilizados, sem limite informado",
+                                       id: "credits", durationMinutes: AIProviderIntegrations.monthlyMinutes(reset),
+                                       used: used, limit: limit, unit: "créditos")]
+            for bonus in data["bonusCredits"] as? [[String: Any]] ?? [] {
+                guard let spent = number(bonus["used"]), let total = number(bonus["total"]), total > 0 else { continue }
+                let days = number(bonus["daysUntilExpiry"]).map { Int($0) }
+                windows.append(QuotaWindow(name: "Bônus", usedPercent: spent / total * 100,
+                                           resetsAt: days.flatMap { calendarDate($0, now: now) }, detail: "\(spent) de \(total) créditos utilizados",
+                                           id: "bonus", used: spent, limit: total, unit: "créditos"))
+                break
+            }
+            let source = "Kiro CLI v3" + (planLabel.map { " · \($0)" } ?? "") + " · créditos utilizados"
+            return try reading(.kiro, windows: windows, headline: percent, now: now, source: source)
+        }
+        throw AIReadError.malformed
+    }
     private static func calendarDate(_ days: Int, now: Date) -> Date? { Calendar(identifier: .gregorian).date(byAdding: .day, value: days, to: now) }
     private static func civilDate(year: Int, month: Int, day: Int, calendar: Calendar) -> Date? {
         guard let result = calendar.date(from: DateComponents(year: year, month: month, day: day)),
@@ -287,7 +340,11 @@ enum UsageCommand {
         }
         return nil
     }
-    static func run(binary: URL, arguments: [String], input: String = "", rpc: Bool = false,
+    static func run(_ command: AISessionPolicy.Command, binary: URL, workingDirectory: URL? = nil) throws -> String {
+        try run(binary: binary, arguments: command.arguments, input: command.input, rpc: command.rpc,
+                rpcFollowUp: command.rpcFollowUp, timeout: command.timeout, workingDirectory: workingDirectory)
+    }
+    static func run(binary: URL, arguments: [String], input: String = "", rpc: Bool = false, rpcFollowUp: String = "",
                     timeout: TimeInterval = 20, workingDirectory: URL? = nil) throws -> String {
         let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("NexoBar/usage", isDirectory: true)
         try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
@@ -350,10 +407,12 @@ enum UsageCommand {
             if rpc {
                 let lines = String(decoding: stdout, as: UTF8.self).split(separator: "\n")
                 for line in lines {
-                    guard let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any] else { continue }
+                    // Bidirectional peers may send their own requests; only responses carry no method.
+                    guard let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+                          object["method"] == nil, object["result"] != nil || object["error"] != nil else { continue }
                     if (object["id"] as? Int) == 1, !sentRequest {
                         guard object["error"] == nil else { throw AIReadError.malformed }
-                        try send("{\"method\":\"initialized\"}\n{\"id\":2,\"method\":\"account/rateLimits/read\",\"params\":null}\n")
+                        try send(rpcFollowUp)
                         sentRequest = true
                     }
                     if (object["id"] as? Int) == 2 { return String(decoding: stdout, as: UTF8.self) }

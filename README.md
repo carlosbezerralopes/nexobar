@@ -68,7 +68,7 @@ Os indicadores de IA são opcionais. Configure os clientes necessários fora do 
 |---|---|---|
 | Claude | Consulta temporária `/usage` do Claude Code, em PTY no Mac e ConPTY no Windows. | A descoberta Windows inclui o executável nativo do pacote npm oficial; consulta exige cliente e sessão existentes. Veja o [diagnóstico e seus limites](windows/docs/CLAUDE-CONPTY.md). |
 | Codex | RPC de limites pelo `codex app-server`. | Consulta nativa Windows retornou uma janela; depende da CLI e sessão existentes. |
-| Kiro | Comando `/usage` pela CLI não interativa. | Consulta nativa Windows retornou uma janela; depende de versão/formato compatíveis. |
+| Kiro | No Mac, `_kiro/account/getUsage` pelo ACP do engine v3 (`kiro-cli acp`), com o `/usage` não interativo do v2 como fallback; no Windows, o `/usage` do v2. | Consulta nativa Windows retornou uma janela; depende de versão/formato compatíveis. |
 | GitHub Copilot | Consulta pela sessão existente de `gh api`. | Cliente ausente no ambiente Windows validado; consulta pendente. |
 | Antigravity | `/usage` pela CLI no macOS. | Sem interface validada no Windows neste ciclo. |
 | Cursor, Grok, OpenCode Go e GLM | Sem interface de sessão permitida validada neste modo. | Cotas indisponíveis. |
