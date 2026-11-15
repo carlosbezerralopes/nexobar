@@ -78,6 +78,16 @@ final class AIProvidersTests: XCTestCase {
         XCTAssertThrowsError(try AIUsageParser.kiro("Plan: KIRO PRO", now: now))
         XCTAssertThrowsError(try AIUsageParser.kiro("login required", now: now))
     }
+    func testKiroV2OutputWithoutBarUsesCreditsPair() throws {
+        let raw = "Estimated Usage | resets on 2026-12-01 | KIRO PRO MAX\nCredits (3191.50 of 5000 covered in plan), 63.8%\nOverages: Disabled\nYour plan is managed by your organization's administrator.\n"
+        let november = ISO8601DateFormatter().date(from: "2026-11-15T12:00:00Z")!
+        let window = try AIUsageParser.kiro(raw, now: november).windows[0]
+        XCTAssertEqual(window.usedPercent!, 63.83, accuracy: 0.001)
+        XCTAssertEqual(window.used, 3191.5)
+        XCTAssertEqual(window.limit, 5000)
+        XCTAssertEqual(window.resetsAt, ISO8601DateFormatter().date(from: "2026-12-01T00:00:00Z"))
+        XCTAssertNotNil(window.durationMinutes)
+    }
     func testKiroMonthDayResetRollsYear() throws {
         let format = ISO8601DateFormatter()
         let december = format.date(from: "2026-12-20T12:00:00Z")!

@@ -5,7 +5,7 @@ final class AISessionPolicyTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_792_584_000)
 
     func testOnlyExistingClientQueriesAreAllowed() {
-        XCTAssertEqual(AISessionPolicy.command(for: .kiro)?.arguments, ["chat", "--no-interactive", "/usage"])
+        XCTAssertEqual(AISessionPolicy.command(for: .kiro)?.arguments, ["chat", "--agent-engine", "v2", "--no-interactive", "/usage"])
         XCTAssertEqual(AISessionPolicy.command(for: .antigravity)?.arguments, ["--print", "/usage"])
         XCTAssertEqual(AISessionPolicy.command(for: .codex)?.arguments, ["app-server"])
         XCTAssertEqual(AISessionPolicy.command(for: .codex)?.rpc, true)
