@@ -16,7 +16,8 @@ enum AISessionPolicy {
             return Command(binary: "codex", arguments: ["app-server"],
                            input: "{\"id\":1,\"method\":\"initialize\",\"params\":{\"clientInfo\":{\"name\":\"nexobar\",\"version\":\"0.2\"}}}\n", rpc: true)
         case .kiro:
-            return Command(binary: "kiro-cli", arguments: ["chat", "--no-interactive", "/usage"])
+            // O v2 é fixado porque o v3 envia /usage ao modelo como prompt.
+            return Command(binary: "kiro-cli", arguments: ["chat", "--agent-engine", "v2", "--no-interactive", "/usage"])
         case .antigravity:
             return Command(binary: "agy", arguments: ["--print", "/usage"], timeout: 70)
         case .copilot:
