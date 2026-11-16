@@ -98,6 +98,66 @@ Check(QuotaParsers.Kiro("Credits\n████░░ 22% (11 of 50 covered)", no
 Check(ClaudeNativeUsage.Plan("Claude Code v2.1.316\nOpus 5.5 · Claude Ultra\n~\\workspace") == "Ultra" && ClaudeNativeUsage.Plan("Claude Code\nSonnet 5.5 · Claude Max") == "Max", "Claude plan from startup header");
 Check(ClaudeNativeUsage.Plan("Claude Code\nOpus 5.5 · API Usage Billing") is null, "Claude non-plan header ignored");
 Reject(() => QuotaParsers.Kiro("some unrelated 40%", now), "Kiro arbitrary model text not quota");
+const string kiroUsage = """{"jsonrpc":"2.0","id":2,"result":{"success":true,"data":{"planName":"KIRO PRO MAX","billingCycleReset":"2026-12-01","usageBreakdowns":[{"resourceType":"CREDIT","used":3631.75,"limit":5000,"percentage":72,"hasLimit":true}],"bonusCredits":[]}}}""";
+string KiroLines(params string[] lines) => string.Join("\n", lines);
+const string kiroInit = """{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1}}""";
+const string kiroPeer = """{"jsonrpc":"2.0","id":2,"method":"session/request_permission","params":{}}""";
+const string kiroNotice = """{"jsonrpc":"2.0","method":"_kiro/notice","params":{"id":2}}""";
+var acp = QuotaParsers.KiroAcp(KiroLines(kiroInit, kiroNotice, kiroPeer, "42", """{"id":"x","method":"ping"}""", "not json", kiroUsage), now);
+Check(acp.Windows is { Count: 1 } && acp.Windows[0].Id == "credits" && acp.Windows[0].Label == "Créditos" && Math.Abs(acp.Percent!.Value - 72.635) < 1e-9 &&
+    acp.Windows[0].Used == 3631.75 && acp.Windows[0].Limit == 5000 && acp.Windows[0].Unit == "créditos" &&
+    acp.Windows[0].ResetsAt == new DateTimeOffset(2026, 12, 1, 0, 0, 0, TimeSpan.Zero), "Kiro ACP credits recomputed from used/limit with UTC cycle reset");
+Check(acp.Plan == "Pro Max" && acp.Source == "Kiro CLI v3 · Pro Max · utilizado" && Presentation.Name("Kiro", acp) == "Kiro Pro Max", "Kiro ACP plan and source");
+Check(QuotaParsers.KiroAcp(kiroUsage, now).Percent == acp.Percent, "Kiro ACP single response line");
+var acpBonus = QuotaParsers.KiroAcp(kiroUsage.Replace("\"bonusCredits\":[]", "\"bonusCredits\":[{\"name\":\"Welcome\",\"used\":0},{\"name\":\"Promo\",\"used\":25,\"total\":100,\"daysUntilExpiry\":10}]"), now);
+Check(acpBonus.Windows is { Count: 2 } && acpBonus.Windows[1].Id == "bonus" && acpBonus.Windows[1].Label == "Bônus" && acpBonus.Windows[1].UsedPercent == 25 &&
+    acpBonus.Windows[1].Limit == 100 && acpBonus.Windows[1].ResetsAt == now.AddDays(10), "Kiro ACP first valid bonus with expiry");
+var acpUnlimited = QuotaParsers.KiroAcp(kiroUsage.Replace("\"hasLimit\":true", "\"hasLimit\":false"), now);
+Check(acpUnlimited.Percent is null && acpUnlimited.Windows![0].UsedPercent is null && acpUnlimited.Windows[0].Limit is null && acpUnlimited.Windows[0].Used == 3631.75, "Kiro ACP without limit has no percent, never zero");
+Check(QuotaParsers.KiroAcp(kiroUsage.Replace("KIRO PRO MAX", "Unknown"), now) is { Plan: null, Source: "Kiro CLI v3 · utilizado" }, "Kiro ACP unknown plan omitted");
+Check(QuotaParsers.KiroAcp(kiroUsage.Replace("2026-12-01", "2026-02-30"), now).Windows![0].ResetsAt is null, "Kiro ACP invalid civil reset dropped");
+void KiroAcpFails(string raw, bool refused, string label)
+{
+    try { QuotaParsers.KiroAcp(raw, now); }
+    catch (FormatException e) { Check((e is QuotaRefusedException) == refused && KiroQuery.AllowsFallback(e) == !refused, label); return; }
+    throw new Exception("FAIL " + label + " accepted invalid input");
+}
+KiroAcpFails("""{"jsonrpc":"2.0","id":2,"result":{"success":true}}""", false, "Kiro ACP success without data unavailable with fallback");
+KiroAcpFails("""{"jsonrpc":"2.0","id":2,"result":{"success":true,"data":{"usageBreakdowns":[]}}}""", false, "Kiro ACP without credits malformed");
+KiroAcpFails("""{"jsonrpc":"2.0","id":2,"result":{"success":false,"message":"Your plan is managed by admin"}}""", false, "Kiro ACP success false neutral unavailable");
+KiroAcpFails("""{"jsonrpc":"2.0","id":2,"result":{"success":false,"message":"Not logged in"}}""", true, "Kiro ACP success false auth refused");
+KiroAcpFails("""{"jsonrpc":"2.0","id":2,"result":{"success":false,"message":"Rate limit exceeded"}}""", true, "Kiro ACP success false rate limit refused");
+KiroAcpFails("""{"jsonrpc":"2.0","id":2,"error":{"code":-32601,"message":"Method not found"}}""", false, "Kiro ACP JSON-RPC error malformed with fallback");
+KiroAcpFails("""{"jsonrpc":"2.0","id":2,"error":{"code":-32000,"message":"Request throttled"}}""", true, "Kiro ACP JSON-RPC throttling refused");
+KiroAcpFails(KiroLines(kiroInit, kiroPeer, "42"), false, "Kiro ACP without id 2 response malformed");
+var kiroExchange = RpcExchange.KiroAcp("0.7.0");
+Check(kiroExchange.ErrorReachesParser && kiroExchange.FollowUp.Count == 1 && !string.Join("\n", kiroExchange.FollowUp.Prepend(kiroExchange.Initialize)).Contains("session/") &&
+    kiroExchange.FollowUp[0] == """{"jsonrpc":"2.0","id":2,"method":"_kiro/account/getUsage","params":{}}""", "Kiro ACP sends only initialize and getUsage");
+using (var init = JsonDocument.Parse(kiroExchange.Initialize))
+    Check(init.RootElement.GetProperty("method").GetString() == "initialize" && init.RootElement.GetProperty("id").GetInt32() == 1 &&
+        init.RootElement.GetProperty("params").GetProperty("protocolVersion").GetInt32() == 1 &&
+        init.RootElement.GetProperty("params").GetProperty("clientInfo").GetProperty("version").GetString() == "0.7.0" &&
+        !init.RootElement.GetProperty("params").GetProperty("clientCapabilities").GetProperty("terminal").GetBoolean(), "Kiro ACP initialize without fs or terminal");
+Check(RpcExchange.Codex.Initialize == "{\"id\":1,\"method\":\"initialize\",\"params\":{\"clientInfo\":{\"name\":\"nexobar\",\"version\":\"0.3.1\"},\"capabilities\":{\"experimentalApi\":true}}}" &&
+    RpcExchange.Codex.FollowUp.SequenceEqual(["{\"method\":\"initialized\",\"params\":{}}", "{\"id\":2,\"method\":\"account/rateLimits/read\",\"params\":{}}"]) &&
+    !RpcExchange.Codex.ErrorReachesParser, "Codex RPC lines unchanged");
+Check(KiroQuery.AcpArguments.SequenceEqual(["acp", "--agent-engine", "v3"]) && KiroQuery.FallbackArguments.SequenceEqual(["chat", "--agent-engine", "v2", "--no-interactive", "/usage"]), "Kiro primary and fallback arguments");
+bool IsResponse(string line, out int id) { using var d = JsonDocument.Parse(line); return RpcExchange.TryResponse(d.RootElement, out id, out _); }
+Check(!IsResponse(kiroPeer, out _) && !IsResponse(kiroNotice, out _) && !IsResponse("42", out _) && !IsResponse("""{"id":"x","result":{}}""", out _) &&
+    !IsResponse("""{"id":2}""", out _) && IsResponse(kiroUsage, out int responseId) && responseId == 2, "RPC transport ignores peer requests and notifications");
+const string kiroV2 = "Credits\n████░░ 22% (11 of 50 covered)";
+int fallbackRuns = 0;
+Reading KiroRead(Func<Task<string>> primary) => KiroQuery.Read(primary, () => { fallbackRuns++; return Task.FromResult(kiroV2); }, now).GetAwaiter().GetResult();
+Check(KiroRead(() => Task.FromResult(kiroUsage)).Source.StartsWith("Kiro CLI v3") && fallbackRuns == 0, "Kiro v3 success does not run v2");
+Check(KiroRead(() => throw new IOException("RPC fechado")).Percent == 22 && fallbackRuns == 1, "Kiro closed ACP falls back to v2");
+Check(KiroRead(() => Task.FromResult("""{"jsonrpc":"2.0","id":2,"error":{"code":-32601,"message":"Method not found"}}""")).Percent == 22 && fallbackRuns == 2, "Kiro ACP method missing falls back to v2");
+Check(KiroRead(() => Task.FromResult("""{"jsonrpc":"2.0","id":2,"result":{"success":true}}""")).Source == "Kiro CLI · /usage · utilizado" && fallbackRuns == 3, "Kiro ACP without data falls back to v2");
+foreach (var (failure, label) in new (Exception, string)[] { (new QuotaRefusedException("Sessão Kiro indisponível"), "refusal"),
+    (new QuotaOutputLimitException("RPC excedeu limite"), "output limit"), (new OperationCanceledException(), "timeout or cancellation") })
+{
+    try { KiroRead(() => throw failure); throw new Exception("FAIL Kiro " + label + " accepted"); }
+    catch (Exception e) when (e.GetType() == failure.GetType()) { Check(fallbackRuns == 3, "Kiro " + label + " never runs v2"); }
+}
 Check(Presentation.Countdown(now.AddHours(2).AddMinutes(13), now, false) == "2h", "compact hours");
 Check(Presentation.Countdown(now.AddHours(2).AddMinutes(13), now, true) == "2h13m", "detailed hours");
 Check(Presentation.Countdown(now.AddDays(3).AddHours(4), now, true) == "3d4h", "detailed days");

@@ -6,7 +6,7 @@ Sem leitura direta de Keychain/tokens, login, navegador de autenticação ou inf
 |---|---|---|
 | Claude | /usage nativo em PTY temporário, macOS0.3.1 | /usage nativo em ConPTY temporário, Windows0.3.1; teste físico pendente |
 | Codex | codex app-server → account/rateLimits/read | Mesmo protocolo pela CLI existente |
-| Kiro | kiro-cli acp --agent-engine v3 → _kiro/account/getUsage, sem sessão nem prompt; se indisponível ou sem cotas, kiro-cli chat --agent-engine v2 --no-interactive /usage | kiro-cli chat --agent-engine v2 --no-interactive /usage, sujeito à disponibilidade da CLI |
+| Kiro | kiro-cli acp --agent-engine v3 → _kiro/account/getUsage, sem sessão nem prompt; se indisponível ou sem cotas, kiro-cli chat --agent-engine v2 --no-interactive /usage | Mesma sequência e mesmo fallback pela CLI existente; ACP sem validação nativa no Windows |
 | Copilot | gh api --hostname github.com copilot_internal/user | Mesmo comando pela sessão gh |
 | Antigravity | agy --print /usage | Indisponível até validar interface segura nesta plataforma |
 | Cursor, Grok, OpenCode Go, GLM | Indisponíveis neste modo | Indisponíveis neste modo |
