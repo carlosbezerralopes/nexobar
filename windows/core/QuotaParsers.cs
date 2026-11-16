@@ -122,6 +122,60 @@ public static partial class QuotaParsers
         return new("kiro", "Kiro", now, Windows: windows, Percent: percent, Source: "Kiro CLI · /usage · utilizado",
             Plan: plan.Success ? Presentation.PlanName(plan.Groups[1].Value) : null);
     }
+    /// Parses the `_kiro/account/getUsage` response (id 2) from `kiro-cli acp --agent-engine v3`.
+    public static Reading KiroAcp(string raw, DateTimeOffset now)
+    {
+        foreach (string line in raw.Split('\n'))
+        {
+            JsonDocument document;
+            try { document = JsonDocument.Parse(line); }
+            catch (JsonException) { continue; }
+            using (document)
+            {
+                var root = document.RootElement;
+                if (!RpcExchange.TryResponse(root, out int id, out bool error) || id != 2) continue;
+                // An older CLI without the method (-32601) stays malformed, so the v2 fallback runs.
+                if (error) throw KiroRefusal(root.TryGetProperty("error", out var detail) ? Text(detail, "message") : null) ?? new FormatException("Consulta ACP do Kiro recusada");
+                if (!root.TryGetProperty("result", out var result) || result.ValueKind != JsonValueKind.Object) throw new FormatException("Resposta ACP do Kiro inválida");
+                if (!result.TryGetProperty("success", out var success) || success.ValueKind != JsonValueKind.True)
+                    throw KiroRefusal(Text(result, "message")) ?? new FormatException("Kiro não informou cotas");
+                // "Your plan is managed by admin" answers success without data: no quota, never zero.
+                if (!result.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object) throw new FormatException("Kiro não informou cotas");
+                var breakdowns = data.TryGetProperty("usageBreakdowns", out var list) && list.ValueKind == JsonValueKind.Array
+                    ? list.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.Object).ToArray() : [];
+                var credit = breakdowns.FirstOrDefault(x => Text(x, "resourceType") == "CREDIT");
+                if (credit.ValueKind != JsonValueKind.Object && breakdowns.Length == 1) credit = breakdowns[0];
+                if (Number(credit, "used") is not { } used) throw new FormatException("Kiro não informou créditos utilizados");
+                // The CLI truncates `percentage`; recompute it, and only for a real limit.
+                double? limit = credit.TryGetProperty("hasLimit", out var hasLimit) && hasLimit.ValueKind == JsonValueKind.True && Number(credit, "limit") is { } cap && cap > 0 ? cap : null;
+                double? percent = limit is { } total ? used / total * 100 : null;
+                DateTimeOffset? reset = Text(data, "billingCycleReset") is { } stamp && Regex.IsMatch(stamp, @"^\d{4}-\d{2}-\d{2}$") &&
+                    DateTimeOffset.TryParseExact(stamp, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var civil) ? civil : null;
+                string? planText = Text(data, "planName")?.Trim();
+                if (planText is not null) planText = Regex.Replace(planText, @"^KIRO\s+", "", RegexOptions.IgnoreCase);
+                string? plan = planText is null or "" || planText.Equals("Unknown", StringComparison.OrdinalIgnoreCase) ? null : Presentation.PlanName(planText);
+                List<QuotaWindow> windows = [new("credits", "Créditos", percent, reset, used, limit, "créditos")];
+                if (data.TryGetProperty("bonusCredits", out var bonuses) && bonuses.ValueKind == JsonValueKind.Array)
+                    foreach (var bonus in bonuses.EnumerateArray())
+                    {
+                        if (Number(bonus, "used") is not { } spent || Number(bonus, "total") is not { } bonusTotal || bonusTotal <= 0) continue;
+                        DateTimeOffset? expiry = Number(bonus, "daysUntilExpiry") is { } days && days is >= 0 and <= 3660 ? now.AddDays(Math.Truncate(days)) : null;
+                        windows.Add(new("bonus", "Bônus", spent / bonusTotal * 100, expiry, spent, bonusTotal, "créditos"));
+                        break;
+                    }
+                return new("kiro", "Kiro", now, Windows: windows, Percent: percent,
+                    Source: "Kiro CLI v3" + (plan is null ? "" : " · " + plan) + " · utilizado", Plan: plan);
+            }
+        }
+        throw new FormatException("Resposta ACP do Kiro sem id 2");
+    }
+    private static QuotaRefusedException? KiroRefusal(string? message)
+    {
+        string lower = (message ?? "").ToLowerInvariant();
+        if (new[] { "rate limit", "throttl", "too many" }.Any(lower.Contains)) return new("Limite de consultas do Kiro atingido");
+        if (new[] { "not logged", "login", "auth" }.Any(lower.Contains)) return new("Sessão Kiro indisponível");
+        return null;
+    }
     private static double? Number(JsonElement root, string key) => root.ValueKind == JsonValueKind.Object && root.TryGetProperty(key, out var node) &&
         node.ValueKind == JsonValueKind.Number && node.TryGetDouble(out double value) && double.IsFinite(value) ? value : null;
     private static double? Percentage(JsonElement root, string key) => Number(root, key) is { } n && n is >= 0 and <= 100 ? n : null;

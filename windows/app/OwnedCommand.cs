@@ -66,7 +66,7 @@ internal sealed class OwnedCommand : IDisposable
         }
         return null;
     }
-    internal async Task<string> Run(string binary, string[] args, bool rpc, CancellationToken cancellation, string? workingDirectory = null)
+    internal async Task<string> Run(string binary, string[] args, NexoBar.Core.RpcExchange? rpc, CancellationToken cancellation, string? workingDirectory = null)
     {
         string path = Locate(binary) ?? throw new IOException("CLI não instalada no PATH");
         string commandLine;
@@ -126,15 +126,14 @@ internal sealed class OwnedCommand : IDisposable
             using var writer = new StreamWriter(new FileStream(input.Parent, FileAccess.Write, 4096, false), new UTF8Encoding(false)) { AutoFlush = true };
             if (ResumeThread(threadHandle) == uint.MaxValue) throw new Win32Exception();
             var stderrTask = Drain(errors, timeout.Token);
-            if (!rpc) writer.Close();
+            if (rpc is null) writer.Close();
             string result;
-            if (rpc)
+            if (rpc is not null)
             {
-                await writer.WriteLineAsync("{\"id\":1,\"method\":\"initialize\",\"params\":{\"clientInfo\":{\"name\":\"nexobar\",\"version\":\"0.3.1\"},\"capabilities\":{\"experimentalApi\":true}}}");
-                _ = await Response(reader, 1, timeout.Token);
-                await writer.WriteLineAsync("{\"method\":\"initialized\",\"params\":{}}");
-                await writer.WriteLineAsync("{\"id\":2,\"method\":\"account/rateLimits/read\",\"params\":{}}");
-                result = await Response(reader, 2, timeout.Token);
+                await writer.WriteLineAsync(rpc.Initialize);
+                _ = await Response(reader, 1, true, timeout.Token);
+                foreach (string line in rpc.FollowUp) await writer.WriteLineAsync(line);
+                result = await Response(reader, 2, !rpc.ErrorReachesParser, timeout.Token);
                 writer.Close();
                 TerminateJobObject(job, 0); // An app-server may stay alive after stdin closes.
             }
@@ -159,24 +158,25 @@ internal sealed class OwnedCommand : IDisposable
         {
             int count = await reader.ReadAsync(buffer.AsMemory(), cancellation);
             if (count == 0) return result.ToString();
-            if (result.Length + count > 512 * 1024) throw new IOException("Saída da CLI excedeu o limite");
+            if (result.Length + count > 512 * 1024) throw new NexoBar.Core.QuotaOutputLimitException("Saída da CLI excedeu o limite");
             result.Append(buffer, 0, count);
         }
     }
-    private static async Task<string> Response(StreamReader reader, int id, CancellationToken cancellation)
+    // An error response throws unless the parser must classify it (refusal vs. malformed).
+    private static async Task<string> Response(StreamReader reader, int id, bool rejectError, CancellationToken cancellation)
     {
         int count = 0;
         while (true)
         {
             string line = await BoundedLine(reader, cancellation) ?? throw new IOException("RPC fechado");
             count += line.Length;
-            if (count > 512 * 1024) throw new IOException("RPC excedeu limite");
+            if (count > 512 * 1024) throw new NexoBar.Core.QuotaOutputLimitException("RPC excedeu limite");
             try
             {
                 using var doc = System.Text.Json.JsonDocument.Parse(line);
-                if (doc.RootElement.TryGetProperty("id", out var node) && node.TryGetInt32(out int actual) && actual == id)
+                if (NexoBar.Core.RpcExchange.TryResponse(doc.RootElement, out int actual, out bool error) && actual == id)
                 {
-                    if (doc.RootElement.TryGetProperty("error", out _)) throw new IOException("Consulta RPC recusada");
+                    if (error && rejectError) throw new IOException("Consulta RPC recusada");
                     return line;
                 }
             }
@@ -191,7 +191,7 @@ internal sealed class OwnedCommand : IDisposable
         {
             if (await reader.ReadAsync(one.AsMemory(), cancellation) == 0) return line.Length > 0 ? line.ToString() : null;
             if (one[0] == '\n') return line.ToString();
-            if (line.Length >= 512 * 1024) throw new IOException("Linha RPC excedeu limite");
+            if (line.Length >= 512 * 1024) throw new NexoBar.Core.QuotaOutputLimitException("Linha RPC excedeu limite");
             line.Append(one[0]);
         }
     }
