@@ -5,7 +5,20 @@ final class AISessionPolicyTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_792_584_000)
 
     func testOnlyExistingClientQueriesAreAllowed() {
-        XCTAssertEqual(AISessionPolicy.command(for: .kiro)?.arguments, ["chat", "--agent-engine", "v2", "--no-interactive", "/usage"])
+        let kiro = AISessionPolicy.command(for: .kiro)!
+        XCTAssertEqual(kiro.arguments, ["acp", "--agent-engine", "v3"])
+        XCTAssertTrue(kiro.rpc)
+        XCTAssertTrue(kiro.input.contains(#""method":"initialize""#))
+        XCTAssertTrue(kiro.rpcFollowUp.contains(#""id":2,"method":"_kiro/account/getUsage""#))
+        for text in [kiro.input, kiro.rpcFollowUp] {
+            XCTAssertFalse(text.contains("session/"), "No session or prompt may be opened")
+            XCTAssertTrue(text.hasSuffix("\n"))
+        }
+        XCTAssertEqual(AISessionPolicy.fallbackCommand(for: .kiro)?.arguments, ["chat", "--agent-engine", "v2", "--no-interactive", "/usage"])
+        XCTAssertEqual(AISessionPolicy.fallbackCommand(for: .kiro)?.rpc, false)
+        XCTAssertEqual(AISessionPolicy.command(for: .codex)?.rpcFollowUp,
+                       "{\"method\":\"initialized\"}\n{\"id\":2,\"method\":\"account/rateLimits/read\",\"params\":null}\n")
+        for id in [IndicatorID.codex, .copilot, .antigravity, .claude] { XCTAssertNil(AISessionPolicy.fallbackCommand(for: id)) }
         XCTAssertEqual(AISessionPolicy.command(for: .antigravity)?.arguments, ["--print", "/usage"])
         XCTAssertEqual(AISessionPolicy.command(for: .codex)?.arguments, ["app-server"])
         XCTAssertEqual(AISessionPolicy.command(for: .codex)?.rpc, true)
@@ -34,6 +47,51 @@ final class AISessionPolicyTests: XCTestCase {
                 claudeQuery: { _ in XCTFail("No cache fallback"); throw AIReadError.unavailable }))
             XCTAssertEqual(calls, 1)
         }
+    }
+
+    func testKiroV3FailureFallsBackToV2Only() throws {
+        for failure in [AIReadError.unavailable, .malformed] {
+            var ran: [[String]] = []
+            let reading = try AIProviderIntegrations.read(.kiro, now: now,
+                locate: { URL(fileURLWithPath: "/fixture/" + $0) },
+                run: { command, _ in
+                    ran.append(command.arguments)
+                    if command.rpc { throw failure }
+                    return "Credits (3191.50 of 5000 covered in plan), 63.8%"
+                }, claudeQuery: { _ in throw AIReadError.unavailable })
+            XCTAssertEqual(ran, [["acp", "--agent-engine", "v3"], ["chat", "--agent-engine", "v2", "--no-interactive", "/usage"]])
+            XCTAssertEqual(reading.detail, "Kiro CLI /usage · créditos utilizados")
+        }
+        // Parse-level failure (no data) also falls back.
+        var calls = 0
+        _ = try AIProviderIntegrations.read(.kiro, now: now, locate: { URL(fileURLWithPath: "/fixture/" + $0) },
+            run: { command, _ in
+                calls += 1
+                return command.rpc ? #"{"id":2,"result":{"success":true,"message":"Your plan is managed by admin"}}"# : "██ 40%"
+            }, claudeQuery: { _ in throw AIReadError.unavailable })
+        XCTAssertEqual(calls, 2)
+    }
+
+    func testKiroV3SuccessAndBlockingFailuresSkipV2() throws {
+        let reading = try AIProviderIntegrations.read(.kiro, now: now, locate: { URL(fileURLWithPath: "/fixture/" + $0) },
+            run: { command, _ in
+                XCTAssertTrue(command.rpc, "v2 must not run after v3 success")
+                return AIProvidersTests.kiroACPFixture
+            }, claudeQuery: { _ in throw AIReadError.unavailable })
+        XCTAssertTrue(reading.detail.hasPrefix("Kiro CLI v3"))
+        for failure in [AIReadError.authentication, .rateLimited, .timedOut, .excessiveOutput] {
+            var calls = 0
+            XCTAssertThrowsError(try AIProviderIntegrations.read(.kiro, now: now, locate: { URL(fileURLWithPath: "/fixture/" + $0) },
+                run: { _, _ in calls += 1; throw failure }, claudeQuery: { _ in throw AIReadError.unavailable })) {
+                XCTAssertEqual($0 as? AIReadError, failure)
+            }
+            XCTAssertEqual(calls, 1)
+        }
+        var calls = 0
+        XCTAssertThrowsError(try AIProviderIntegrations.read(.kiro, now: now, locate: { URL(fileURLWithPath: "/fixture/" + $0) },
+            run: { _, _ in calls += 1; return #"{"id":2,"result":{"success":false,"message":"not logged in"}}"# },
+            claudeQuery: { _ in throw AIReadError.unavailable })) { XCTAssertEqual($0 as? AIReadError, .authentication) }
+        XCTAssertEqual(calls, 1)
     }
 
     func testClaudeQueryReturnsFreshResultWithoutFallback() throws {

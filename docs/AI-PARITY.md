@@ -6,7 +6,7 @@ O projeto prioriza **não acessar credenciais, não iniciar login e não procura
 |---|---|---|
 | Claude Mac/Windows0.3.1 | /usage nativo em PTY/ConPTY temporário, pasta configurada já confiável | Sem cache Desktop, Keychain, endpoint próprio ou inferência. Nunca /usage via -p. Pedido de confiança/login aborta. Windows requer claude.exe nativo; consulta física pendente. |
 | Codex | CLI `account/rateLimits/read` | Sem leitura direta de auth.json ou fallback de snapshot em falhas. |
-| Kiro | CLI `/usage` não interativa | Sem token SQLite, GetUsageLimits ou recuperação por outra credencial. Timeout fica indisponível. |
+| Kiro | Mac: ACP v3 `_kiro/account/getUsage`, fallback para `/usage` v2 não interativo; Windows: `/usage` v2 | Sem token SQLite, chamada própria a GetUsageLimits ou recuperação por outra credencial. O ACP nunca abre sessão nem envia prompt. Autenticação, limite de consultas e timeout não acionam o fallback. |
 | Copilot | `gh api` pela sessão da CLI | Sem exportar token nem ler hosts.yml. |
 | Antigravity | CLI `/usage` não interativa | Sem bridge do IDE/captura de CSRF ou outra identidade. |
 | Cursor, Grok, OpenCode Go, GLM | Indisponíveis neste modo | Leitores de tokens/configurações removidos. Não se presume que estejam deslogados. |

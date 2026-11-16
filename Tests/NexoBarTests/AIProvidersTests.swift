@@ -128,6 +128,58 @@ final class AIProvidersTests: XCTestCase {
         XCTAssertEqual(counter.kiro, 4)
     }
 
+    // Fixture captured from kiro-cli 3.3.0 `acp --agent-engine v3`; account values are synthetic.
+    static let kiroACPFixture = """
+    {"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1}}
+    {"jsonrpc":"2.0","method":"_kiro/memory/syncStatus","params":{}}
+    {"jsonrpc":"2.0","id":2,"result":{"success":true,"message":"Plan: KIRO PRO MAX | 1 usage breakdowns","data":{"planName":"KIRO PRO MAX","billingCycleReset":"2026-12-01","overagesEnabled":false,"isEnterprise":true,"usageBreakdowns":[{"resourceType":"CREDIT","displayName":"Credits","used":3631.75,"limit":5000,"percentage":72,"currentOverages":0,"overageRate":0.04,"overageCharges":0,"currency":"USD","hasLimit":true}],"bonusCredits":[],"addOnCredits":[],"overageCapable":true}}}
+    """
+    func testKiroACPRecomputesPercentAndMonthlyReset() throws {
+        let november = ISO8601DateFormatter().date(from: "2026-11-15T12:00:00Z")!
+        let result = try AIUsageParser.kiroACP(Self.kiroACPFixture, now: november)
+        XCTAssertEqual(result.windows.count, 1)
+        let window = result.windows[0]
+        XCTAssertEqual(window.id, "credits")
+        XCTAssertEqual(window.name, "Créditos")
+        XCTAssertEqual(window.usedPercent!, 72.635, accuracy: 0.0001)
+        XCTAssertEqual(window.used, 3631.75)
+        XCTAssertEqual(window.limit, 5000)
+        XCTAssertEqual(window.unit, "créditos")
+        XCTAssertEqual(window.resetsAt, ISO8601DateFormatter().date(from: "2026-12-01T00:00:00Z"))
+        XCTAssertEqual(window.durationMinutes, 43200)
+        XCTAssertEqual(window.detail, "3631.75 de 5000.0 créditos utilizados")
+        XCTAssertEqual(result.value, IndicatorReading.percent(72.635))
+        XCTAssertEqual(result.detail, "Kiro CLI v3 · KIRO PRO MAX · créditos utilizados")
+    }
+    func testKiroACPBonusUnknownResetAndNoLimit() throws {
+        let line = #"{"id":2,"result":{"success":true,"data":{"planName":"Unknown","billingCycleReset":"Unknown","usageBreakdowns":[{"resourceType":"CREDIT","used":12,"limit":999999,"percentage":0,"hasLimit":false}],"bonusCredits":[{"name":"Welcome bonus","used":5,"total":50,"daysUntilExpiry":3}]}}}"#
+        let result = try AIUsageParser.kiroACP(line, now: now)
+        XCTAssertEqual(result.value, "—")
+        XCTAssertNil(result.windows[0].usedPercent)
+        XCTAssertNil(result.windows[0].limit)
+        XCTAssertEqual(result.windows[0].used, 12)
+        XCTAssertNil(result.windows[0].resetsAt)
+        XCTAssertNil(result.windows[0].durationMinutes)
+        XCTAssertEqual(result.detail, "Kiro CLI v3 · créditos utilizados")
+        XCTAssertEqual(result.windows[1].id, "bonus")
+        XCTAssertEqual(result.windows[1].usedPercent, 10)
+        XCTAssertNotNil(result.windows[1].resetsAt)
+    }
+    func testKiroACPFailuresAreNeverZero() {
+        func error(_ text: String) -> AIReadError? {
+            do { _ = try AIUsageParser.kiroACP(text, now: now); return nil } catch { return error as? AIReadError }
+        }
+        XCTAssertEqual(error(#"{"id":2,"result":{"success":true,"message":"Your plan is managed by admin"}}"#), .unavailable)
+        XCTAssertEqual(error(#"{"id":2,"result":{"success":false,"message":"Failed to retrieve usage information: boom"}}"#), .unavailable)
+        XCTAssertEqual(error(#"{"id":2,"result":{"success":false,"message":"Failed to retrieve usage information: not logged in"}}"#), .authentication)
+        XCTAssertEqual(error(#"{"id":2,"error":{"code":-32601,"message":"Method not found"}}"#), .malformed)
+        XCTAssertEqual(error(#"{"id":2,"error":{"code":-32000,"message":"Too many requests"}}"#), .rateLimited)
+        XCTAssertEqual(error(#"{"id":2,"result":{"success":true,"data":{"usageBreakdowns":[]}}}"#), .malformed)
+        // A peer request reusing id 2 is not the response.
+        XCTAssertEqual(error(#"{"id":2,"method":"session/request_permission","params":{}}"#), .malformed)
+        XCTAssertEqual(error(#"{"id":1,"result":{}}"#), .malformed)
+    }
+
     // Subprocess tests use only OS tools as fixtures; never execute authenticated CLIs.
     func testSubprocessBothStreamsAndOutputBound() throws {
         let result = try UsageCommand.run(binary: URL(fileURLWithPath: "/bin/sh"), arguments: ["-c", "echo fixture; echo diagnostic >&2"])
@@ -142,5 +194,25 @@ final class AIProvidersTests: XCTestCase {
             guard case AIReadError.timedOut = $0 else { return XCTFail("Expected timeout") }
         }
         XCTAssertLessThan(ProcessInfo.processInfo.systemUptime - start, 2)
+    }
+
+    func testRPCFollowUpIsSentOnlyAfterInitializeResponse() throws {
+        // Synthetic ACP peer: a notification and a peer request with id 1 must not trigger the follow-up.
+        let script = """
+        read first; case "$first" in *'"id":1'*) ;; *) exit 3 ;; esac
+        echo '{"jsonrpc":"2.0","method":"_kiro/memory/syncStatus","params":{}}'
+        echo '{"jsonrpc":"2.0","id":1,"method":"session/request_permission","params":{}}'
+        if read -t 1 early; then exit 5; fi
+        echo '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1}}'
+        read second; case "$second" in *'"id":2'*'_kiro/account/getUsage'*) ;; *) exit 4 ;; esac
+        echo '{"jsonrpc":"2.0","id":2,"result":{"success":true}}'
+        sleep 30
+        """
+        let command = AISessionPolicy.command(for: .kiro)!
+        let output = try UsageCommand.run(AISessionPolicy.Command(binary: "bash", arguments: ["-c", script], input: command.input,
+                                                                   rpc: true, rpcFollowUp: command.rpcFollowUp, timeout: 5),
+                                          binary: URL(fileURLWithPath: "/bin/bash"))
+        XCTAssertTrue(output.contains(#""id":2,"result""#))
+        XCTAssertEqual(UsageCommand.runningProcessCount, 0)
     }
 }
